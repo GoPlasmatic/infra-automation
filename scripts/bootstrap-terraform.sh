@@ -8,6 +8,16 @@ echo "==================================="
 echo "Terraform State Storage Bootstrap"
 echo "==================================="
 
+# Cleanup function to ensure temp files are removed
+cleanup() {
+    echo "Cleaning up temporary files..."
+    rm -f main-bootstrap.tf state-storage-temp.tf variables-temp.tf
+    mv main.tf.backup main.tf 2>/dev/null || true
+}
+
+# Set trap to cleanup on exit
+trap cleanup EXIT
+
 cd terraform
 
 # Check if backend-config.tf already exists
@@ -24,25 +34,29 @@ mv main.tf main.tf.backup 2>/dev/null || true
 # Create temporary main.tf without backend
 cat > main-bootstrap.tf << 'EOF'
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.10"
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~> 4.13"
     }
     random = {
       source  = "hashicorp/random"
-      version = "~> 3.0"
+      version = "~> 3.6"
     }
     local = {
       source  = "hashicorp/local"
-      version = "~> 2.0"
+      version = "~> 2.7"
     }
   }
 }
 
 provider "azurerm" {
-  features {}
+  features {
+    resource_group {
+      prevent_deletion_if_contains_resources = false
+    }
+  }
 }
 EOF
 
@@ -83,10 +97,6 @@ terraform {
   }
 }
 EOF
-
-# Restore original main.tf
-mv main.tf.backup main.tf 2>/dev/null || true
-rm -f main-bootstrap.tf state-storage-temp.tf variables-temp.tf
 
 echo "Backend configuration created successfully!"
 echo "Now initializing Terraform with backend..."
