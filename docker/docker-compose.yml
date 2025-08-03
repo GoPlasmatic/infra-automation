@@ -1,4 +1,5 @@
 # Docker Compose configuration for all services
+# Website repository is now public - deployment will work
 services:
   # Reverse Proxy - Routes traffic to different services
   nginx:
