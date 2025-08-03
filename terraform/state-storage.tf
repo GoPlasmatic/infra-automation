@@ -27,7 +27,7 @@ resource "azurerm_storage_account" "tfstate" {
   
   # Security settings
   min_tls_version                 = "TLS1_2"
-  enable_https_traffic_only       = true
+  https_traffic_only_enabled      = true
   allow_nested_items_to_be_public = false
 
   tags = {
