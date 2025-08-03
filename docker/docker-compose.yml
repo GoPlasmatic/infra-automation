@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Reverse Proxy - Routes traffic to different services
   nginx:

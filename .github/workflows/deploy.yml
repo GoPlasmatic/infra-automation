@@ -139,8 +139,9 @@ jobs:
             set -e
             
             # Create required directories
-            sudo mkdir -p /opt/docker/{nginx/sites-enabled,prometheus,grafana}
+            sudo mkdir -p /opt/docker/{nginx/sites-enabled,nginx/snippets,prometheus,grafana}
             sudo mkdir -p /opt/ghost /opt/website
+            sudo mkdir -p /var/www/certbot
             
             # Move Docker files to proper location
             sudo cp -r ~/docker/* /opt/docker/
@@ -192,8 +193,8 @@ jobs:
             
             # Rebuild and restart website
             cd /opt/docker
-            sudo docker-compose build website
-            sudo docker-compose up -d website
+            sudo docker compose build website
+            sudo docker compose up -d website
             
             # Health check
             sleep 10
@@ -213,7 +214,7 @@ jobs:
             set -e
             sudo cp -r ~/nginx/* /opt/docker/nginx/
             cd /opt/docker
-            sudo docker-compose restart nginx
+            sudo docker compose restart nginx
             
             # Test nginx config
             sudo docker exec nginx nginx -t
@@ -232,7 +233,7 @@ jobs:
             set -e
             sudo cp -r ~/prometheus/* /opt/docker/prometheus/
             cd /opt/docker
-            sudo docker-compose restart prometheus grafana
+            sudo docker compose restart prometheus grafana
           EOF
       
       - name: Deploy Ghost
@@ -249,13 +250,13 @@ jobs:
             sudo sed -i 's/#  ghost_/  ghost_/' docker-compose.yml
             
             # Start Ghost containers
-            sudo docker-compose up -d ghost ghost_db
+            sudo docker compose up -d ghost ghost_db
             
             # Enable Ghost nginx configs
             sudo mv /opt/docker/nginx/sites-enabled/ghost-admin.conf.disabled /opt/docker/nginx/sites-enabled/ghost-admin.conf || true
             sudo mv /opt/docker/nginx/sites-enabled/future.conf.disabled /opt/docker/nginx/sites-enabled/future.conf || true
             
-            sudo docker-compose restart nginx
+            sudo docker compose restart nginx
           EOF
       
       - name: Run health checks
