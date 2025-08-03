@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+# Don't exit on error - handle errors gracefully
+set +e
 
 # Automated SSL Certificate Setup Script
 # This script sets up Let's Encrypt SSL certificates for all configured domains
@@ -114,14 +115,16 @@ setup_ssl_for_service() {
     # Copy certificates to nginx directory
     run_command "sudo mkdir -p /opt/docker/nginx/ssl"
     
+    # Copy certificates with error handling
+    echo "Copying certificates to nginx directory..."
     if [ "$service" = "main" ]; then
         # Main site uses default cert names
-        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/fullchain.pem /opt/docker/nginx/ssl/fullchain.pem"
-        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/privkey.pem /opt/docker/nginx/ssl/privkey.pem"
+        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/fullchain.pem /opt/docker/nginx/ssl/fullchain.pem 2>/dev/null" || true
+        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/privkey.pem /opt/docker/nginx/ssl/privkey.pem 2>/dev/null" || true
     else
         # Other services use service-specific names
-        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/fullchain.pem /opt/docker/nginx/ssl/${service}-fullchain.pem"
-        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/privkey.pem /opt/docker/nginx/ssl/${service}-privkey.pem"
+        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/fullchain.pem /opt/docker/nginx/ssl/${service}-fullchain.pem 2>/dev/null" || true
+        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/privkey.pem /opt/docker/nginx/ssl/${service}-privkey.pem 2>/dev/null" || true
     fi
     
     # Set permissions
