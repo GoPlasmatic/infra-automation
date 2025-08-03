@@ -1,4 +1,5 @@
 name: Deploy Applications
+# Deploys Docker services and configures SSL
 
 on:
   push:
