@@ -88,7 +88,9 @@ jobs:
           # If not found, get from Azure
           if [ -z "$VM_IP" ]; then
             echo "Getting IP from Azure..."
-            VM_IP=$(az vm show -d -g ${{ vars.PROJECT_NAME }}-${{ vars.ENVIRONMENT }}-rg -n ${{ vars.PROJECT_NAME }}-${{ vars.ENVIRONMENT }}-vm --query publicIps -o tsv)
+            PROJECT_NAME="${{ vars.PROJECT_NAME || 'multi-app-server' }}"
+            ENVIRONMENT="${{ vars.ENVIRONMENT || 'production' }}"
+            VM_IP=$(az vm show -d -g ${PROJECT_NAME}-${ENVIRONMENT}-rg -n ${PROJECT_NAME}-${ENVIRONMENT}-vm --query publicIps -o tsv)
           fi
           
           echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
@@ -183,8 +185,8 @@ jobs:
             sudo docker-compose restart prometheus grafana
           EOF
       
-      - name: Deploy Ghost (if enabled)
-        if: (needs.detect-changes.outputs.ghost == 'true' || github.event_name == 'workflow_run') && vars.GHOST_ENABLED == 'true'
+      - name: Deploy Ghost
+        if: needs.detect-changes.outputs.ghost == 'true' || github.event_name == 'workflow_run'
         run: |
           echo "Deploying Ghost CMS..."
           
@@ -218,10 +220,8 @@ jobs:
           # Check Grafana
           curl -f -s -o /dev/null -w "Grafana: %{http_code}\n" http://$VM_IP:3001
           
-          # Check Ghost if enabled
-          if [ "${{ vars.GHOST_ENABLED }}" == "true" ]; then
-            curl -f -s -o /dev/null -w "Ghost Admin: %{http_code}\n" http://$VM_IP:2368/ghost
-          fi
+          # Check Ghost
+          curl -f -s -o /dev/null -w "Ghost Admin: %{http_code}\n" http://$VM_IP:2368/ghost || true
       
       - name: Setup SSL Certificates
         run: |
