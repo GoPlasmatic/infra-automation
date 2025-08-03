@@ -141,6 +141,10 @@ jobs:
         run: |
           echo "public_ip=$(terraform output -raw public_ip_address)" >> $GITHUB_OUTPUT
           echo "storage_account=$(terraform output -raw storage_account_name)" >> $GITHUB_OUTPUT
+          
+          # Display nameserver instructions
+          echo ""
+          terraform output -raw nameserver_instructions
       
       - name: Save outputs to artifacts
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
