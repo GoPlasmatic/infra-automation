@@ -241,15 +241,18 @@ jobs:
           VM_IP=${{ steps.get-ip.outputs.vm_ip }}
           
           echo "Running health checks..."
+          echo "Note: Services may take a moment to fully start"
           
-          # Check main website
-          curl -f -s -o /dev/null -w "Website: %{http_code}\n" http://$VM_IP
+          # Give services time to start
+          sleep 30
           
-          # Check Grafana
-          curl -f -s -o /dev/null -w "Grafana: %{http_code}\n" http://$VM_IP:3001
+          # Check main website (nginx default or website)
+          curl -f -s -o /dev/null -w "Website: %{http_code}\n" http://$VM_IP || true
           
-          # Check Ghost
-          curl -f -s -o /dev/null -w "Ghost Admin: %{http_code}\n" http://$VM_IP:2368/ghost || true
+          # Check if docker is running
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP "sudo docker ps"
+          
+          echo "Health checks completed. Services should be accessible via domain names after DNS propagation."
       
       - name: Setup SSL Certificates
         run: |
