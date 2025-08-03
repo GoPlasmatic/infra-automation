@@ -158,10 +158,12 @@ Ensure the secret exists in the environment settings.
 
 ### Prevention Tips
 
-1. **Use Latest Action Versions:**
+1. **Action Version Compatibility:**
    ```yaml
-   - uses: azure/login@v2  # Not v1
+   - uses: azure/login@v1  # v2 has breaking changes for service principal auth
    ```
+   
+   **Note**: While v2 is the latest version, it has breaking changes for service principal authentication with the `creds` format. Use v1 for compatibility with the traditional JSON credentials format.
 
 2. **Set Explicit Permissions:**
    ```yaml

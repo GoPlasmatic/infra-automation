@@ -38,10 +38,9 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
       
       - name: Configure Azure credentials
-        uses: azure/login@v2
+        uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-          enable-AzPSSession: false
       
       - name: Bootstrap Terraform State Storage
         working-directory: ./
