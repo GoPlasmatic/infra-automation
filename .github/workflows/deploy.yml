@@ -105,6 +105,31 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ steps.get-ip.outputs.vm_ip }} >> ~/.ssh/known_hosts
       
+      - name: Initial VM Setup
+        run: |
+          echo "Setting up initial directories and Docker configuration..."
+          
+          # Copy all Docker configuration files
+          scp -i ~/.ssh/deploy_key -r docker/* ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/docker/
+          
+          # Setup directories and move files
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+            set -e
+            
+            # Create required directories
+            sudo mkdir -p /opt/docker/{nginx/sites-enabled,prometheus,grafana}
+            sudo mkdir -p /opt/ghost /opt/website
+            
+            # Move Docker files to proper location
+            sudo cp -r ~/docker/* /opt/docker/
+            
+            # Set permissions
+            sudo chown -R $USER:docker /opt/docker
+            sudo chmod -R 755 /opt/docker
+            
+            echo "Initial setup completed"
+          EOF
+      
       - name: Configure Domain Names
         run: |
           echo "Configuring domain: ${DOMAIN_NAME}"
