@@ -12,7 +12,7 @@ This is an Infrastructure as Code (IaC) repository for deploying a multi-applica
 - **Terraform**: Manages Azure resources (VM, networking, DNS, storage)
 - **Docker Compose**: Orchestrates services (Ghost, MySQL, Nginx, Prometheus, Grafana)
 - **GitHub Actions**: Automated CI/CD pipeline for infrastructure and application deployment
-- **Azure DNS**: Automatic DNS zone management with record creation
+- **DNS**: External DNS management (GoDaddy)
 
 ### Service Architecture
 ```
@@ -141,7 +141,7 @@ sudo docker compose -f /opt/docker/docker-compose.yml restart <service>
 - All manual deployment options have been removed
 - SSL/HTTPS is automatic and mandatory
 - Terraform state storage is automatic
-- DNS zone creation is automatic (default: true)
+- DNS is managed externally in GoDaddy
 - All domain references use DOMAIN_NAME variable (no hardcoding)
 - Infrastructure updates should only be done through GitHub Actions
 

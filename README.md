@@ -14,7 +14,7 @@ This repository contains Infrastructure as Code (IaC) for deploying Ghost CMS an
 - **Legacy Service**: React/Vite website (being replaced by Ghost)
 - **State Management**: Automatic Terraform state storage in Azure
 - **SSL/TLS**: Automatic Let's Encrypt certificates for all services
-- **DNS Management**: Azure DNS zone with automatic record creation
+- **DNS Management**: Uses external DNS provider (GoDaddy)
 
 ## Deployment Method
 
@@ -49,14 +49,15 @@ This infrastructure is deployed exclusively through GitHub Actions. Manual deplo
 
 5. Monitor deployment in the GitHub Actions tab
 
-6. Update domain nameservers:
-   - Check GitHub Actions output for Azure nameservers
-   - Update nameservers in your domain registrar (e.g., GoDaddy)
-   - See AZURE_DNS_SETUP.md for detailed instructions
+6. Configure DNS in GoDaddy:
+   - Add A record for @ pointing to VM public IP
+   - Add A record for www pointing to VM public IP
+   - Add A record for grafana pointing to VM public IP
+   - Add A record for webadmin pointing to VM public IP
+   - Add A record for future pointing to VM public IP
 
-7. Wait for DNS propagation (5-30 minutes to 48 hours)
-   - DNS records are automatically created in Azure
-   - SSL certificates will be automatically configured
+7. Wait for DNS propagation (5-30 minutes)
+   - SSL certificates will be automatically configured once DNS propagates
    - All services will have HTTPS enabled
    - Certificate renewal is automated via cron
 
@@ -130,16 +131,16 @@ Pre-configured dashboards:
 - `webadmin.{your-domain}` - Ghost CMS admin interface
 - `future.{your-domain}` - Ghost CMS frontend preview
 
-### Required DNS Records
+### DNS Configuration
 
-Add these A records pointing to your server's public IP:
+Configure these A records in your DNS provider (e.g., GoDaddy) pointing to the VM's public IP:
 - `@` (root domain)
 - `www` - Main website
 - `grafana` - Monitoring dashboard  
 - `webadmin` - Ghost CMS admin
 - `future` - Ghost frontend preview
 
-All HTTP traffic is automatically redirected to HTTPS. SSL certificates are automatically provisioned during deployment.
+All HTTP traffic is automatically redirected to HTTPS. SSL certificates are automatically provisioned once DNS records propagate.
 
 ## Ghost CMS Configuration
 

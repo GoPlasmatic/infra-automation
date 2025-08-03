@@ -107,8 +107,6 @@ your-domain.com
 ```
 **Note**: All subdomains (www, grafana, webadmin, future) will be created under this domain.
 
-### 7. CREATE_DNS_ZONE (Deprecated)
-Azure DNS zone is now created automatically. This variable is no longer needed.
 
 ## Setting up Secrets in GitHub
 

@@ -56,11 +56,6 @@ variable "email_address" {
   type        = string
 }
 
-variable "create_dns_zone" {
-  description = "Whether to create Azure DNS zone for the domain"
-  type        = bool
-  default     = true
-}
 
 variable "enable_backups" {
   description = "Enable Azure VM backups"

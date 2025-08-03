@@ -34,25 +34,21 @@ output "storage_account_key" {
   sensitive   = true
 }
 
-output "nameserver_instructions" {
-  description = "Instructions for updating nameservers"
+output "dns_instructions" {
+  description = "Instructions for DNS configuration"
   value = <<-EOT
     
     ====================================
-    IMPORTANT: Update DNS Nameservers
+    DNS Configuration Required
     ====================================
     
-    Your Azure DNS nameservers are:
-    ${join("\n    ", azurerm_dns_zone.main.name_servers)}
+    Add these A records in GoDaddy DNS:
     
-    To complete setup:
-    1. Log in to GoDaddy
-    2. Go to Domain Settings for ${var.domain_name}
-    3. Click "Change Nameservers"
-    4. Choose "Enter my own nameservers (advanced)"
-    5. Remove existing nameservers
-    6. Add the 4 Azure nameservers listed above
-    7. Save changes
+    @ (root)     → ${azurerm_public_ip.main.ip_address}
+    www          → ${azurerm_public_ip.main.ip_address}
+    grafana      → ${azurerm_public_ip.main.ip_address}
+    webadmin     → ${azurerm_public_ip.main.ip_address}
+    future       → ${azurerm_public_ip.main.ip_address}
     
     DNS propagation takes 5-30 minutes typically.
     ====================================

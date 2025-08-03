@@ -118,7 +118,6 @@ jobs:
             -var="allowed_ssh_ips=${{ vars.ALLOWED_SSH_IPS || '[]' }}" \
             -var="domain_name=${{ vars.DOMAIN_NAME }}" \
             -var="email_address=${{ secrets.EMAIL_ADDRESS }}" \
-            -var="create_dns_zone=${{ vars.CREATE_DNS_ZONE || 'true' }}" \
             -out=tfplan
         env:
           ARM_CLIENT_ID: ${{ env.ARM_CLIENT_ID }}
@@ -142,9 +141,9 @@ jobs:
           echo "public_ip=$(terraform output -raw public_ip_address)" >> $GITHUB_OUTPUT
           echo "storage_account=$(terraform output -raw storage_account_name)" >> $GITHUB_OUTPUT
           
-          # Display nameserver instructions
+          # Display DNS instructions
           echo ""
-          terraform output -raw nameserver_instructions
+          terraform output -raw dns_instructions || true
       
       - name: Save outputs to artifacts
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
