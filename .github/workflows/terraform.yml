@@ -7,12 +7,14 @@ on:
     paths:
       - 'terraform/**'
       - '.github/workflows/terraform.yml'
+      - 'scripts/bootstrap-terraform.sh'
   pull_request:
     branches:
       - main
     paths:
       - 'terraform/**'
       - '.github/workflows/terraform.yml'
+      - 'scripts/bootstrap-terraform.sh'
 
 env:
   TF_VERSION: "1.10.5"

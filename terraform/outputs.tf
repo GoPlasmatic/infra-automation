@@ -15,7 +15,7 @@ output "resource_group_name" {
 
 output "ssh_connection_string" {
   description = "SSH connection string"
-  value       = "ssh -i ${var.ssh_public_key_path} ${var.admin_username}@${azurerm_public_ip.main.ip_address}"
+  value       = "ssh ${var.admin_username}@${azurerm_public_ip.main.ip_address}"
 }
 
 output "vm_size_info" {
