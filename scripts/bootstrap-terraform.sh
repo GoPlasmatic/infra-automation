@@ -152,10 +152,41 @@ output "tfstate_container" {
 }
 EOF
 
-# Initialize and apply in bootstrap directory
+# Initialize terraform
 terraform init
+
+# Import existing resources if they exist
+PROJECT_NAME="${PROJECT_NAME:-multi-app-server}"
+RESOURCE_GROUP="${PROJECT_NAME}-tfstate-rg"
+
+# Check if resource group exists and import it
+if az group show --name "$RESOURCE_GROUP" &>/dev/null; then
+    echo "Importing existing resource group..."
+    terraform import azurerm_resource_group.tfstate "/subscriptions/${ARM_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}" || true
+    
+    # Get storage account and import it
+    STORAGE_ACCOUNT=$(az storage account list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv)
+    if [ -n "$STORAGE_ACCOUNT" ]; then
+        echo "Importing existing storage account: $STORAGE_ACCOUNT"
+        
+        # Extract the suffix from the storage account name (everything after 'tfstate')
+        SUFFIX=${STORAGE_ACCOUNT#tfstate}
+        echo "Storage account suffix: $SUFFIX"
+        
+        # Import the random string with the existing suffix
+        terraform import random_string.state_storage_suffix "$SUFFIX" || true
+        
+        # Import the storage account
+        terraform import azurerm_storage_account.tfstate "/subscriptions/${ARM_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Storage/storageAccounts/${STORAGE_ACCOUNT}" || true
+        
+        # Import the container
+        terraform import azurerm_storage_container.tfstate "https://${STORAGE_ACCOUNT}.blob.core.windows.net/tfstate" || true
+    fi
+fi
+
+# Now apply
 terraform apply -auto-approve \
-  -var="project_name=${PROJECT_NAME:-multi-app-server}" \
+  -var="project_name=${PROJECT_NAME}" \
   -var="environment=${ENVIRONMENT:-production}" \
   -var="location=${AZURE_LOCATION:-East US}"
 
