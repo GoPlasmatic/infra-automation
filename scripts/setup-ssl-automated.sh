@@ -81,13 +81,34 @@ setup_ssl_for_service() {
     # Create certbot webroot directory
     run_command "sudo mkdir -p /var/www/certbot"
     
-    # Get SSL certificate
-    if ! run_command "sudo certbot certonly --webroot --webroot-path=/var/www/certbot --non-interactive --agree-tos --email $EMAIL --expand --force-renewal $domain_flags"; then
-        # If webroot fails, try standalone
-        echo "Webroot method failed, trying standalone..."
-        run_command "cd /opt/docker && sudo docker compose stop nginx"
-        run_command "sudo certbot certonly --standalone --non-interactive --agree-tos --email $EMAIL --expand --force-renewal $domain_flags"
-        run_command "cd /opt/docker && sudo docker compose start nginx"
+    # First, ensure nginx is running and has the certbot webroot location
+    run_command "sudo mkdir -p /var/www/certbot"
+    run_command "sudo mkdir -p /opt/docker/nginx/ssl"
+    
+    # Try webroot method first (nginx must be running)
+    if ! run_command "sudo certbot certonly --webroot --webroot-path=/var/www/certbot --non-interactive --agree-tos --email $EMAIL --expand --force-renewal $domain_flags 2>/dev/null"; then
+        # If webroot fails, stop ALL services using port 80 and try standalone
+        echo "Webroot method failed, stopping services and trying standalone..."
+        
+        # Stop nginx container
+        run_command "cd /opt/docker && sudo docker compose stop nginx 2>/dev/null || true"
+        
+        # Also stop system nginx if running
+        run_command "sudo systemctl stop nginx 2>/dev/null || true"
+        
+        # Wait for port to be free
+        run_command "sleep 5"
+        
+        # Try standalone method
+        if ! run_command "sudo certbot certonly --standalone --non-interactive --agree-tos --email $EMAIL --expand --force-renewal $domain_flags"; then
+            echo "ERROR: Failed to obtain certificate for $service"
+            # Restart services anyway
+            run_command "cd /opt/docker && sudo docker compose start nginx 2>/dev/null || true"
+            return 1
+        fi
+        
+        # Restart nginx
+        run_command "cd /opt/docker && sudo docker compose start nginx 2>/dev/null || true"
     fi
     
     # Copy certificates to nginx directory
