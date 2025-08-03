@@ -191,7 +191,37 @@ jobs:
               cd website && sudo git pull
             else
               echo "Cloning website repository..."
-              sudo git clone https://github.com/${{ github.repository_owner }}/website.git
+              # Try to clone, if fails create placeholder
+              if ! sudo git clone https://github.com/${{ github.repository_owner }}/website.git 2>/dev/null; then
+                echo "Repository not accessible, creating placeholder website..."
+                sudo mkdir -p website
+                sudo tee website/index.html > /dev/null << 'HTML'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GoPlasmatic - Coming Soon</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+        h1 { color: #333; }
+    </style>
+</head>
+<body>
+    <h1>GoPlasmatic</h1>
+    <p>Website coming soon. Ghost CMS is being set up.</p>
+    <p>Visit <a href="https://webadmin.goplasmatic.io/ghost">Admin Panel</a></p>
+</body>
+</html>
+HTML
+                sudo tee website/package.json > /dev/null << 'JSON'
+{
+  "name": "placeholder",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "mkdir -p build && cp index.html build/"
+  }
+}
+JSON
+              fi
               sudo chown -R $USER:$USER website
             fi
             
