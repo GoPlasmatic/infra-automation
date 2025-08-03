@@ -185,9 +185,16 @@ resource "azurerm_linux_virtual_machine" "main" {
   }
 }
 
+# Random suffix for storage account name
+resource "random_string" "storage_suffix" {
+  length  = 4
+  special = false
+  upper   = false
+}
+
 # Storage Account for backups and media
 resource "azurerm_storage_account" "main" {
-  name                     = "${replace(var.project_name, "-", "")}${var.environment}storage"
+  name                     = "st${substr(replace(var.project_name, "-", ""), 0, 8)}${substr(var.environment, 0, 3)}${random_string.storage_suffix.result}"
   resource_group_name      = azurerm_resource_group.main.name
   location                 = azurerm_resource_group.main.location
   account_tier             = "Standard"
