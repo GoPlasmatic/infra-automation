@@ -90,10 +90,32 @@ jobs:
             fi
           fi
           
-          # If not found, get from Azure
+          # If not found, try to resolve from DNS (since DNS is configured)
+          if [ -z "$VM_IP" ]; then
+            echo "Trying to get IP from DNS..."
+            if [ -n "${DOMAIN_NAME}" ]; then
+              VM_IP=$(dig +short ${DOMAIN_NAME} | tail -n1)
+              if [ -n "$VM_IP" ]; then
+                echo "Found IP from DNS: $VM_IP"
+              fi
+            fi
+          fi
+          
+          # If still not found, get from Azure
           if [ -z "$VM_IP" ]; then
             echo "Getting IP from Azure..."
-            VM_IP=$(az vm show -d -g ${PROJECT_NAME}-${ENVIRONMENT}-rg -n ${PROJECT_NAME}-${ENVIRONMENT}-vm --query publicIps -o tsv)
+            echo "Using PROJECT_NAME=${PROJECT_NAME}, ENVIRONMENT=${ENVIRONMENT}"
+            if [ -n "${PROJECT_NAME}" ] && [ -n "${ENVIRONMENT}" ]; then
+              VM_IP=$(az vm show -d -g ${PROJECT_NAME}-${ENVIRONMENT}-rg -n ${PROJECT_NAME}-${ENVIRONMENT}-vm --query publicIps -o tsv 2>/dev/null || echo "")
+            fi
+          fi
+          
+          # Final fallback - hardcode for now if all else fails
+          if [ -z "$VM_IP" ]; then
+            echo "Warning: Could not determine VM IP dynamically"
+            # You can uncomment the line below as a temporary workaround
+            # VM_IP="20.169.212.253"
+            exit 1
           fi
           
           echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
