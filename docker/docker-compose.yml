@@ -1,0 +1,216 @@
+version: '3.8'
+
+services:
+  # Reverse Proxy - Routes traffic to different services
+  nginx:
+    image: nginx:alpine
+    container_name: main_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/sites-enabled:/etc/nginx/sites-enabled:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+      - certbot_webroot:/var/www/certbot:ro
+    networks:
+      - proxy_network
+    depends_on:
+      - website
+      - ghost
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Main Website - React/Vite Application
+  # Note: This will be replaced by Ghost CMS after migration
+  website:
+    build:
+      context: /opt/website
+      dockerfile: /opt/docker/Dockerfile.website
+    container_name: main_website
+    restart: always
+    expose:
+      - "80"
+    networks:
+      - proxy_network
+    environment:
+      - NODE_ENV=production
+
+  # Ghost CMS - Website Management System
+  ghost:
+    image: ghost:5-alpine
+    container_name: ghost_cms
+    restart: always
+    expose:
+      - "2368"
+    environment:
+      url: https://future.goplasmatic.io
+      admin__url: https://webadmin.goplasmatic.io
+      NODE_ENV: production
+      database__client: mysql
+      database__connection__host: ghost_db
+      database__connection__user: ${GHOST_MYSQL_USER}
+      database__connection__password: ${GHOST_MYSQL_PASSWORD}
+      database__connection__database: ${GHOST_MYSQL_DATABASE}
+      mail__transport: SMTP
+      mail__options__service: ${MAIL_SERVICE}
+      mail__options__auth__user: ${MAIL_USER}
+      mail__options__auth__pass: ${MAIL_PASS}
+      mail__from: ${MAIL_FROM}
+      paths__contentPath: /var/lib/ghost/content
+    volumes:
+      - ../applications/ghost/data/content:/var/lib/ghost/content
+    networks:
+      - proxy_network
+      - ghost_network
+    depends_on:
+      ghost_db:
+        condition: service_healthy
+
+  # Ghost Database
+  ghost_db:
+    image: mysql:8.0
+    container_name: ghost_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${GHOST_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${GHOST_MYSQL_DATABASE}
+      MYSQL_USER: ${GHOST_MYSQL_USER}
+      MYSQL_PASSWORD: ${GHOST_MYSQL_PASSWORD}
+    volumes:
+      - ghost_mysql_data:/var/lib/mysql
+    networks:
+      - ghost_network
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${GHOST_MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+
+  # Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: always
+    expose:
+      - "9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - monitoring_network
+      - proxy_network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: always
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SERVER_ROOT_URL=https://grafana.goplasmatic.io
+      - GF_SERVER_SERVE_FROM_SUB_PATH=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - monitoring_network
+      - proxy_network
+    depends_on:
+      - prometheus
+
+  # Node Exporter for system metrics
+  node_exporter:
+    image: prom/node-exporter:latest
+    container_name: node_exporter
+    restart: always
+    expose:
+      - "9100"
+    networks:
+      - monitoring_network
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+  # cAdvisor for Docker container metrics
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: always
+    expose:
+      - "8080"
+    networks:
+      - monitoring_network
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+
+  # Backup service - commented out as backup script was moved to /scripts/backup.sh
+  # backup:
+  #   image: alpine:latest
+  #   container_name: backup_service
+  #   restart: always
+  #   environment:
+  #     BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+  #   volumes:
+  #     - ../applications:/applications:ro
+  #     - ghost_mysql_data:/mysql/ghost:ro
+  #     - ./backups:/backups
+  #     - ./scripts/backup-multi.sh:/backup.sh:ro
+  #   entrypoint: /bin/sh -c "chmod +x /backup.sh && echo '0 2 * * * /backup.sh' | crontab - && crond -f -d 8"
+  #   networks:
+  #     - backup_network
+
+volumes:
+  nginx_logs:
+    driver: local
+  ghost_mysql_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  certbot_webroot:
+    driver: local
+
+networks:
+  proxy_network:
+    driver: bridge
+    name: proxy_network
+  ghost_network:
+    driver: bridge
+    internal: true
+  monitoring_network:
+    driver: bridge
+    internal: true
+  backup_network:
+    driver: bridge
+    internal: true

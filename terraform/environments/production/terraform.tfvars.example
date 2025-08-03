@@ -1,0 +1,15 @@
+project_name        = "multi-app-server"
+environment         = "production"
+location            = "East US"
+vm_size             = "Standard_B2s"  # 2 vCPUs, 4GB RAM
+admin_username      = "azureuser"
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+allowed_ssh_ips     = ["YOUR_IP_ADDRESS/32"]
+domain_name         = "your-domain.com"
+email_address       = "your-email@domain.com"
+
+# Azure DNS zone is created automatically
+# To disable (not recommended), set: create_dns_zone = false
+
+# Enable backups (default: true)
+# enable_backups = true

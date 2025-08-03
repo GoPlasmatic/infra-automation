@@ -1,0 +1,61 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.tfvars
+!terraform.tfvars.example
+backend-config.tf
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+*.csr
+
+# Backup files
+*.backup
+*.bak
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Docker volumes (local testing)
+docker/backups/*
+!docker/backups/.gitkeep
+
+# Ansible
+*.retry
+ansible/*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+
+# Node (for any future node projects)
+node_modules/
+npm-debug.log
+yarn-error.log

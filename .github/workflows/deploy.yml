@@ -1,0 +1,249 @@
+name: Deploy Applications
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docker/**'
+      - 'ansible/**'
+      - '.github/workflows/deploy.yml'
+  workflow_run:
+    workflows: ["Terraform Infrastructure"]
+    types:
+      - completed
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      website: ${{ steps.changes.outputs.website }}
+      nginx: ${{ steps.changes.outputs.nginx }}
+      monitoring: ${{ steps.changes.outputs.monitoring }}
+      ghost: ${{ steps.changes.outputs.ghost }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Detect file changes
+        id: changes
+        run: |
+          echo "Detecting changes..."
+          
+          # Function to check if files changed
+          check_changes() {
+            local pattern=$1
+            if git diff --name-only HEAD~1 HEAD | grep -q "$pattern"; then
+              echo "true"
+            else
+              echo "false"
+            fi
+          }
+          
+          # Check each component
+          echo "website=$(check_changes 'docker/Dockerfile.website\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+          echo "nginx=$(check_changes 'docker/nginx/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+          echo "monitoring=$(check_changes 'docker/prometheus/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+          echo "ghost=$(check_changes 'docker/ghost/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+
+  build-and-deploy:
+    name: Build and Deploy
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure Azure credentials
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Get VM IP
+        id: get-ip
+        run: |
+          # Try to get from workflow artifact first
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            echo "Getting IP from Terraform workflow..."
+            ARTIFACT_URL="${{ github.event.workflow_run.artifacts_url }}"
+            ARTIFACT_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" $ARTIFACT_URL | jq -r '.artifacts[] | select(.name=="terraform-outputs") | .id')
+            
+            if [ ! -z "$ARTIFACT_ID" ]; then
+              curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
+                -o terraform-outputs.zip
+              unzip terraform-outputs.zip
+              VM_IP=$(cat vm_public_ip.txt)
+            fi
+          fi
+          
+          # If not found, get from Azure
+          if [ -z "$VM_IP" ]; then
+            echo "Getting IP from Azure..."
+            VM_IP=$(az vm show -d -g ${{ vars.PROJECT_NAME }}-${{ vars.ENVIRONMENT }}-rg -n ${{ vars.PROJECT_NAME }}-${{ vars.ENVIRONMENT }}-vm --query publicIps -o tsv)
+          fi
+          
+          echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ steps.get-ip.outputs.vm_ip }} >> ~/.ssh/known_hosts
+      
+      - name: Configure Domain Names
+        run: |
+          echo "Configuring domain: ${{ vars.DOMAIN_NAME }}"
+          
+          # Copy configuration script
+          scp -i ~/.ssh/deploy_key scripts/configure-nginx-domains.sh ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/
+          
+          # Run configuration
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
+            chmod +x ~/configure-nginx-domains.sh
+            sudo ~/configure-nginx-domains.sh "${{ vars.DOMAIN_NAME }}"
+          EOF
+      
+      - name: Deploy Website
+        if: needs.detect-changes.outputs.website == 'true' || github.event_name == 'workflow_run'
+        run: |
+          echo "Deploying website..."
+          
+          # Copy files to VM
+          scp -i ~/.ssh/deploy_key -r docker/docker-compose.yml docker/Dockerfile.website ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/
+          
+          # Build and restart website container
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+            set -e
+            cd ~
+            
+            # Update docker-compose.yml
+            sudo mv docker-compose.yml /opt/docker/
+            sudo mv Dockerfile.website /opt/docker/
+            
+            # Pull latest website code
+            cd /opt
+            if [ -d "website" ]; then
+              cd website && git pull
+            else
+              git clone https://github.com/${{ github.repository_owner }}/website.git
+            fi
+            
+            # Rebuild and restart website
+            cd /opt/docker
+            sudo docker-compose build website
+            sudo docker-compose up -d website
+            
+            # Health check
+            sleep 10
+            curl -f http://localhost:3000 || exit 1
+          EOF
+      
+      - name: Deploy Nginx
+        if: needs.detect-changes.outputs.nginx == 'true' || github.event_name == 'workflow_run'
+        run: |
+          echo "Deploying Nginx configuration..."
+          
+          # Copy nginx config
+          scp -i ~/.ssh/deploy_key -r docker/nginx/* ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/nginx/
+          
+          # Update and restart nginx
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+            set -e
+            sudo cp -r ~/nginx/* /opt/docker/nginx/
+            cd /opt/docker
+            sudo docker-compose restart nginx
+            
+            # Test nginx config
+            sudo docker exec nginx nginx -t
+          EOF
+      
+      - name: Deploy Monitoring
+        if: needs.detect-changes.outputs.monitoring == 'true' || github.event_name == 'workflow_run'
+        run: |
+          echo "Deploying monitoring stack..."
+          
+          # Copy prometheus config
+          scp -i ~/.ssh/deploy_key -r docker/prometheus/* ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/prometheus/
+          
+          # Update and restart monitoring
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+            set -e
+            sudo cp -r ~/prometheus/* /opt/docker/prometheus/
+            cd /opt/docker
+            sudo docker-compose restart prometheus grafana
+          EOF
+      
+      - name: Deploy Ghost (if enabled)
+        if: (needs.detect-changes.outputs.ghost == 'true' || github.event_name == 'workflow_run') && vars.GHOST_ENABLED == 'true'
+        run: |
+          echo "Deploying Ghost CMS..."
+          
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+            set -e
+            cd /opt/docker
+            
+            # Enable Ghost in docker-compose
+            sudo sed -i 's/#ghost:/ghost:/' docker-compose.yml
+            sudo sed -i 's/#  ghost_/  ghost_/' docker-compose.yml
+            
+            # Start Ghost containers
+            sudo docker-compose up -d ghost ghost_db
+            
+            # Enable Ghost nginx configs
+            sudo mv /opt/docker/nginx/sites-enabled/ghost-admin.conf.disabled /opt/docker/nginx/sites-enabled/ghost-admin.conf || true
+            sudo mv /opt/docker/nginx/sites-enabled/future.conf.disabled /opt/docker/nginx/sites-enabled/future.conf || true
+            
+            sudo docker-compose restart nginx
+          EOF
+      
+      - name: Run health checks
+        run: |
+          VM_IP=${{ steps.get-ip.outputs.vm_ip }}
+          
+          echo "Running health checks..."
+          
+          # Check main website
+          curl -f -s -o /dev/null -w "Website: %{http_code}\n" http://$VM_IP
+          
+          # Check Grafana
+          curl -f -s -o /dev/null -w "Grafana: %{http_code}\n" http://$VM_IP:3001
+          
+          # Check Ghost if enabled
+          if [ "${{ vars.GHOST_ENABLED }}" == "true" ]; then
+            curl -f -s -o /dev/null -w "Ghost Admin: %{http_code}\n" http://$VM_IP:2368/ghost
+          fi
+      
+      - name: Setup SSL Certificates
+        run: |
+          VM_IP=${{ steps.get-ip.outputs.vm_ip }}
+          EMAIL="${{ secrets.EMAIL_ADDRESS }}"
+          DOMAIN="${{ vars.DOMAIN_NAME }}"
+          
+          echo "Setting up SSL certificates for domain: $DOMAIN"
+          
+          # Copy SSL setup script to server
+          scp -i ~/.ssh/deploy_key scripts/setup-ssl-automated.sh ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP:~/
+          
+          # Run SSL setup
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP << EOF
+            chmod +x ~/setup-ssl-automated.sh
+            ~/setup-ssl-automated.sh $VM_IP "$EMAIL" "$DOMAIN"
+          EOF
+          
+          echo "SSL setup completed"
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
+          rm -f terraform-outputs.zip vm_public_ip.txt storage_account.txt

@@ -1,0 +1,33 @@
+---
+# Ghost configuration
+ghost_version: "5-alpine"
+ghost_port: 2368
+ghost_content_path: /opt/ghost/content
+
+# Database configuration
+mysql_root_password: "{{ vault_mysql_root_password }}"
+mysql_database: ghost_production
+mysql_user: ghost
+mysql_password: "{{ vault_mysql_password }}"
+
+# Email configuration
+mail_transport: SMTP
+mail_service: Mailgun
+mail_user: "{{ vault_mail_user }}"
+mail_password: "{{ vault_mail_password }}"
+mail_from: "noreply@{{ domain_name }}"
+
+# Backup configuration
+backup_retention_days: 7
+backup_schedule: "0 2 * * *"  # 2 AM daily
+
+# System configuration
+swap_size: 2G
+firewall_allowed_ports:
+  - 22
+  - 80
+  - 443
+
+# Monitoring
+enable_monitoring: true
+monitoring_email: "shankar@goplasmatic.io"

@@ -1,0 +1,101 @@
+name: Terraform Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform.yml'
+
+env:
+  TF_VERSION: "1.5.7"
+  WORKING_DIR: "./terraform"
+
+jobs:
+  terraform:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    environment: production
+    
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      
+      - name: Configure Azure credentials
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Bootstrap Terraform State Storage
+        working-directory: ./
+        run: |
+          chmod +x scripts/bootstrap-terraform.sh
+          ./scripts/bootstrap-terraform.sh
+        env:
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          ENVIRONMENT: ${{ vars.ENVIRONMENT }}
+          AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      
+      - name: Terraform Init
+        run: |
+          # Backend config is now auto-generated
+          terraform init
+      
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="project_name=${{ vars.PROJECT_NAME }}" \
+            -var="environment=${{ vars.ENVIRONMENT }}" \
+            -var="location=${{ vars.AZURE_LOCATION }}" \
+            -var="vm_size=${{ vars.VM_SIZE }}" \
+            -var="admin_username=${{ secrets.VM_ADMIN_USERNAME }}" \
+            -var="ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}" \
+            -var="allowed_ssh_ips=${{ vars.ALLOWED_SSH_IPS }}" \
+            -var="domain_name=${{ vars.DOMAIN_NAME }}" \
+            -var="email_address=${{ secrets.EMAIL_ADDRESS }}" \
+            -var="create_dns_zone=${{ vars.CREATE_DNS_ZONE }}" \
+            -out=tfplan
+      
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve tfplan
+      
+      - name: Get Terraform outputs
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: outputs
+        run: |
+          echo "public_ip=$(terraform output -raw public_ip_address)" >> $GITHUB_OUTPUT
+          echo "storage_account=$(terraform output -raw storage_account_name)" >> $GITHUB_OUTPUT
+      
+      - name: Save outputs to artifacts
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "${{ steps.outputs.outputs.public_ip }}" > ../vm_public_ip.txt
+          echo "${{ steps.outputs.outputs.storage_account }}" > ../storage_account.txt
+      
+      - name: Upload artifacts
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-artifact@v3
+        with:
+          name: terraform-outputs
+          path: |
+            vm_public_ip.txt
+            storage_account.txt
+          retention-days: 1

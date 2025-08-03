@@ -1,0 +1,151 @@
+name: Initial VM Setup
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Terraform Infrastructure"]
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+  setup-vm:
+    name: Configure VM
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure Azure credentials
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Get VM IP
+        id: get-ip
+        run: |
+          VM_IP=$(az vm show -d -g ${{ vars.PROJECT_NAME }}-${{ vars.ENVIRONMENT }}-rg -n ${{ vars.PROJECT_NAME }}-${{ vars.ENVIRONMENT }}-vm --query publicIps -o tsv)
+          echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ steps.get-ip.outputs.vm_ip }} >> ~/.ssh/known_hosts
+      
+      - name: Initial VM setup
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+            set -e
+            
+            echo "Setting up VM environment..."
+            
+            # Create necessary directories
+            sudo mkdir -p /opt/docker/{nginx/sites-enabled,prometheus,grafana}
+            sudo mkdir -p /opt/website
+            sudo mkdir -p /opt/backup
+            
+            # Clone website repository
+            cd /opt
+            if [ ! -d "website" ]; then
+              sudo git clone https://github.com/${{ github.repository_owner }}/website.git
+            fi
+            
+            # Set permissions
+            sudo chown -R $USER:$USER /opt/website
+            sudo chown -R $USER:$USER /opt/docker
+            
+            # Create docker network
+            sudo docker network create web 2>/dev/null || true
+            
+            echo "VM setup completed!"
+          EOF
+      
+      - name: Copy Docker files
+        run: |
+          # Copy docker-compose and related files
+          scp -i ~/.ssh/deploy_key -r docker/* ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:/opt/docker/
+          
+          # Copy Ansible files if needed
+          if [ -d "ansible" ]; then
+            scp -i ~/.ssh/deploy_key -r ansible ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/
+          fi
+      
+      - name: Start services
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+            set -e
+            
+            cd /opt/docker
+            
+            # Start core services
+            sudo docker-compose up -d nginx website prometheus grafana node_exporter cadvisor
+            
+            # Wait for services to start
+            sleep 30
+            
+            # Check services
+            sudo docker-compose ps
+          EOF
+      
+      - name: Configure SSL certificates
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+            set -e
+            
+            # Install certbot
+            sudo apt-get update
+            sudo apt-get install -y certbot
+            
+            # Request certificates for all domains
+            sudo certbot certonly --standalone \
+              --non-interactive \
+              --agree-tos \
+              --email ${{ secrets.EMAIL_ADDRESS }} \
+              -d ${{ vars.DOMAIN_NAME }} \
+              -d www.${{ vars.DOMAIN_NAME }} \
+              -d grafana.${{ vars.DOMAIN_NAME }} \
+              -d webadmin.${{ vars.DOMAIN_NAME }} \
+              -d future.${{ vars.DOMAIN_NAME }} \
+              --pre-hook "docker stop nginx" \
+              --post-hook "docker start nginx" \
+              || echo "Certificate generation failed - continuing anyway"
+            
+            # Setup auto-renewal
+            echo "0 0 * * * root certbot renew --pre-hook 'docker stop nginx' --post-hook 'docker start nginx'" | sudo tee /etc/cron.d/certbot-renew
+          EOF
+      
+      - name: Run health checks
+        run: |
+          VM_IP=${{ steps.get-ip.outputs.vm_ip }}
+          
+          echo "Running health checks..."
+          
+          # Check services
+          curl -f -s -o /dev/null -w "Website: %{http_code}\n" http://$VM_IP || true
+          curl -f -s -o /dev/null -w "Grafana: %{http_code}\n" http://$VM_IP:3001 || true
+          curl -f -s -o /dev/null -w "Prometheus: %{http_code}\n" http://$VM_IP:9090 || true
+      
+      - name: Output summary
+        run: |
+          echo "## Setup Complete!"
+          echo ""
+          echo "VM IP: ${{ steps.get-ip.outputs.vm_ip }}"
+          echo ""
+          echo "### Services:"
+          echo "- Website: http://${{ steps.get-ip.outputs.vm_ip }} (or https://www.${{ vars.DOMAIN_NAME }})"
+          echo "- Grafana: http://${{ steps.get-ip.outputs.vm_ip }}:3001 (or https://grafana.${{ vars.DOMAIN_NAME }})"
+          echo ""
+          echo "### Next Steps:"
+          echo "1. Update your DNS records to point to ${{ steps.get-ip.outputs.vm_ip }}"
+          echo "2. Once DNS propagates, SSL certificates will work"
+          echo "3. To enable Ghost, set GHOST_ENABLED=true in GitHub Variables"
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
