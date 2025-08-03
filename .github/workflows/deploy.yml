@@ -214,6 +214,9 @@ jobs:
         run: |
           echo "Deploying Nginx configuration..."
           
+          # Create nginx directory on remote first
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} "mkdir -p ~/nginx"
+          
           # Copy nginx config
           scp -i ~/.ssh/deploy_key -r docker/nginx/* ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/nginx/
           
@@ -233,12 +236,16 @@ jobs:
         run: |
           echo "Deploying monitoring stack..."
           
+          # Create prometheus directory on remote first
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} "mkdir -p ~/prometheus"
+          
           # Copy prometheus config
           scp -i ~/.ssh/deploy_key -r docker/prometheus/* ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/prometheus/
           
           # Update and restart monitoring
           ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
             set -e
+            sudo mkdir -p /opt/docker/prometheus
             sudo cp -r ~/prometheus/* /opt/docker/prometheus/
             cd /opt/docker
             sudo docker compose restart prometheus grafana
