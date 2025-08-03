@@ -32,6 +32,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: List directory structure
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          echo "Checking for terraform directory:"
+          if [ -d "terraform" ]; then
+            echo "Terraform directory found"
+            ls -la terraform/
+          else
+            echo "Terraform directory NOT found"
+          fi
+      
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -44,10 +57,14 @@ jobs:
       
       - name: Clean up any leftover temp files
         run: |
-          cd terraform
-          rm -f *-temp.tf main-bootstrap.tf backend-config.tf
-          rm -f .terraform.lock.hcl
-          rm -rf .terraform/
+          if [ -d "terraform" ]; then
+            cd terraform
+            rm -f *-temp.tf main-bootstrap.tf backend-config.tf
+            rm -f .terraform.lock.hcl
+            rm -rf .terraform/
+          else
+            echo "Terraform directory not found, skipping cleanup"
+          fi
           
       - name: Bootstrap Terraform State Storage
         working-directory: ./
