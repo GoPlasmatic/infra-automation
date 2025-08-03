@@ -70,6 +70,15 @@ jobs:
             echo "Terraform directory not found, skipping cleanup"
           fi
           
+      - name: Set Azure Environment Variables
+        run: |
+          # Extract values from AZURE_CREDENTIALS
+          AZURE_CREDS='${{ secrets.AZURE_CREDENTIALS }}'
+          echo "ARM_CLIENT_ID=$(echo $AZURE_CREDS | jq -r .clientId)" >> $GITHUB_ENV
+          echo "ARM_CLIENT_SECRET=$(echo $AZURE_CREDS | jq -r .clientSecret)" >> $GITHUB_ENV
+          echo "ARM_SUBSCRIPTION_ID=$(echo $AZURE_CREDS | jq -r .subscriptionId)" >> $GITHUB_ENV
+          echo "ARM_TENANT_ID=$(echo $AZURE_CREDS | jq -r .tenantId)" >> $GITHUB_ENV
+          
       - name: Bootstrap Terraform State Storage
         working-directory: ./
         run: |
@@ -79,11 +88,20 @@ jobs:
           PROJECT_NAME: ${{ vars.PROJECT_NAME || 'multi-app-server' }}
           ENVIRONMENT: ${{ vars.ENVIRONMENT || 'production' }}
           AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'East US' }}
+          ARM_CLIENT_ID: ${{ env.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ env.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ env.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ env.ARM_TENANT_ID }}
       
       - name: Terraform Init
         run: |
           # Backend config is now auto-generated
           terraform init
+        env:
+          ARM_CLIENT_ID: ${{ env.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ env.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ env.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ env.ARM_TENANT_ID }}
       
       - name: Terraform Plan
         id: plan
@@ -100,10 +118,20 @@ jobs:
             -var="email_address=${{ secrets.EMAIL_ADDRESS }}" \
             -var="create_dns_zone=${{ vars.CREATE_DNS_ZONE || 'true' }}" \
             -out=tfplan
+        env:
+          ARM_CLIENT_ID: ${{ env.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ env.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ env.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ env.ARM_TENANT_ID }}
       
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve tfplan
+        env:
+          ARM_CLIENT_ID: ${{ env.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ env.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ env.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ env.ARM_TENANT_ID }}
       
       - name: Get Terraform outputs
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
