@@ -60,12 +60,15 @@ provider "azurerm" {
 }
 EOF
 
+# Clean any existing temp files first
+rm -f state-storage-temp.tf variables-temp.tf
+
 # Copy only the state storage configuration
 cp state-storage.tf state-storage-temp.tf
 cp variables.tf variables-temp.tf
 
 # Initialize and apply only state storage
-terraform init
+terraform init -reconfigure
 terraform apply -auto-approve \
   -target=azurerm_resource_group.tfstate \
   -target=azurerm_storage_account.tfstate \

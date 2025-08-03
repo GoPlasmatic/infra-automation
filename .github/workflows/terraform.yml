@@ -43,9 +43,11 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       
       - name: Clean up any leftover temp files
-        working-directory: ./terraform
         run: |
-          rm -f *-temp.tf main-bootstrap.tf
+          cd terraform
+          rm -f *-temp.tf main-bootstrap.tf backend-config.tf
+          rm -f .terraform.lock.hcl
+          rm -rf .terraform/
           
       - name: Bootstrap Terraform State Storage
         working-directory: ./
@@ -53,9 +55,9 @@ jobs:
           chmod +x scripts/bootstrap-terraform.sh
           ./scripts/bootstrap-terraform.sh
         env:
-          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
-          ENVIRONMENT: ${{ vars.ENVIRONMENT }}
-          AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME || 'multi-app-server' }}
+          ENVIRONMENT: ${{ vars.ENVIRONMENT || 'production' }}
+          AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'East US' }}
       
       - name: Terraform Init
         run: |
@@ -66,16 +68,16 @@ jobs:
         id: plan
         run: |
           terraform plan \
-            -var="project_name=${{ vars.PROJECT_NAME }}" \
-            -var="environment=${{ vars.ENVIRONMENT }}" \
-            -var="location=${{ vars.AZURE_LOCATION }}" \
-            -var="vm_size=${{ vars.VM_SIZE }}" \
-            -var="admin_username=${{ secrets.VM_ADMIN_USERNAME }}" \
+            -var="project_name=${{ vars.PROJECT_NAME || 'multi-app-server' }}" \
+            -var="environment=${{ vars.ENVIRONMENT || 'production' }}" \
+            -var="location=${{ vars.AZURE_LOCATION || 'East US' }}" \
+            -var="vm_size=${{ vars.VM_SIZE || 'Standard_B2s' }}" \
+            -var="admin_username=${{ secrets.VM_ADMIN_USERNAME || 'azureuser' }}" \
             -var="ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}" \
-            -var="allowed_ssh_ips=${{ vars.ALLOWED_SSH_IPS }}" \
+            -var="allowed_ssh_ips=${{ vars.ALLOWED_SSH_IPS || '[]' }}" \
             -var="domain_name=${{ vars.DOMAIN_NAME }}" \
             -var="email_address=${{ secrets.EMAIL_ADDRESS }}" \
-            -var="create_dns_zone=${{ vars.CREATE_DNS_ZONE }}" \
+            -var="create_dns_zone=${{ vars.CREATE_DNS_ZONE || 'true' }}" \
             -out=tfplan
       
       - name: Terraform Apply
