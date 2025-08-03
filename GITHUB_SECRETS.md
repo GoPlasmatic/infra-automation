@@ -20,21 +20,41 @@ The following secrets are required for automated deployment via GitHub Actions:
 
 ## Required GitHub Secrets
 
-### 1. AZURE_CREDENTIALS ✅ (Already set at org level)
-Azure Service Principal credentials in JSON format:
+### 1. AZURE_CREDENTIALS ❗ (Check org-level access)
+Azure Service Principal credentials in JSON format.
+
+**⚠️ IMPORTANT**: If you see "Not all values are present" error:
+1. The secret might not be accessible to this repository
+2. The JSON format might be incorrect
+3. The secret might be empty
+
+**To generate correct credentials:**
+```bash
+# Use our helper script
+./scripts/generate-azure-credentials.sh
+
+# Or manually:
+az ad sp create-for-rbac \
+  --name "github-actions-sp" \
+  --role Contributor \
+  --scopes /subscriptions/YOUR_SUBSCRIPTION_ID \
+  --sdk-auth
+```
+
+**Expected JSON format (must be exact):**
 ```json
 {
-  "clientId": "YOUR_CLIENT_ID",
-  "clientSecret": "YOUR_CLIENT_SECRET",
-  "subscriptionId": "YOUR_SUBSCRIPTION_ID",
-  "tenantId": "YOUR_TENANT_ID"
+  "clientId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "clientSecret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "subscriptionId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "tenantId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 }
 ```
 
-To create this:
-```bash
-az ad sp create-for-rbac --name "github-actions-sp" --role Contributor --scopes /subscriptions/YOUR_SUBSCRIPTION_ID --sdk-auth
-```
+**For Organization-level secrets:**
+- Go to Organization Settings > Secrets and variables > Actions
+- Ensure this repository has access to the secret
+- Or select "All repositories" for access
 
 ### 2. SSH_PUBLIC_KEY
 Your SSH public key content (not the file path). This will be used to access the VM.

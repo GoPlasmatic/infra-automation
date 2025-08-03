@@ -37,6 +37,23 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
       
+      - name: Debug Azure Credentials
+        run: |
+          echo "Checking if AZURE_CREDENTIALS secret exists..."
+          if [ -z "${{ secrets.AZURE_CREDENTIALS }}" ]; then
+            echo "❌ AZURE_CREDENTIALS secret is empty or not set!"
+            echo "Please check:"
+            echo "1. Organization Settings > Secrets > AZURE_CREDENTIALS exists"
+            echo "2. This repository has access to the organization secret"
+            echo "3. Or add AZURE_CREDENTIALS to this repository's secrets"
+            exit 1
+          else
+            echo "✅ AZURE_CREDENTIALS secret exists"
+            echo "Secret length: ${#AZURE_CREDS}"
+          fi
+        env:
+          AZURE_CREDS: ${{ secrets.AZURE_CREDENTIALS }}
+      
       - name: Configure Azure credentials
         uses: azure/login@v1
         with:
