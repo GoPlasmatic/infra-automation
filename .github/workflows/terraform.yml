@@ -1,5 +1,8 @@
 name: Terraform Infrastructure
 
+permissions:
+  contents: read
+
 on:
   push:
     branches:
