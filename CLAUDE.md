@@ -71,9 +71,9 @@ sudo docker compose -f /opt/docker/docker-compose.yml restart <service>
 ## Critical Files and Their Purposes
 
 ### Terraform State Management
-- `terraform/state-storage.tf`: Defines automatic state storage provisioning
 - `scripts/bootstrap-terraform.sh`: Creates state storage in isolated bootstrap directory
 - State storage is created automatically during first deployment
+- Bootstrap script runs independently to avoid resource conflicts
 
 ### GitHub Actions Workflows
 1. **terraform.yml**: 
