@@ -58,6 +58,11 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
     
+    env:
+      PROJECT_NAME: ${{ vars.PROJECT_NAME || 'multi-app-server' }}
+      ENVIRONMENT: ${{ vars.ENVIRONMENT || 'production' }}
+      DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -88,8 +93,6 @@ jobs:
           # If not found, get from Azure
           if [ -z "$VM_IP" ]; then
             echo "Getting IP from Azure..."
-            PROJECT_NAME="${{ vars.PROJECT_NAME || 'multi-app-server' }}"
-            ENVIRONMENT="${{ vars.ENVIRONMENT || 'production' }}"
             VM_IP=$(az vm show -d -g ${PROJECT_NAME}-${ENVIRONMENT}-rg -n ${PROJECT_NAME}-${ENVIRONMENT}-vm --query publicIps -o tsv)
           fi
           
@@ -104,7 +107,7 @@ jobs:
       
       - name: Configure Domain Names
         run: |
-          echo "Configuring domain: ${{ vars.DOMAIN_NAME }}"
+          echo "Configuring domain: ${DOMAIN_NAME}"
           
           # Copy configuration script
           scp -i ~/.ssh/deploy_key scripts/configure-nginx-domains.sh ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/
@@ -112,7 +115,7 @@ jobs:
           # Run configuration
           ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
             chmod +x ~/configure-nginx-domains.sh
-            sudo ~/configure-nginx-domains.sh "${{ vars.DOMAIN_NAME }}"
+            sudo ~/configure-nginx-domains.sh "${DOMAIN_NAME}"
           EOF
       
       - name: Deploy Website
@@ -227,7 +230,7 @@ jobs:
         run: |
           VM_IP=${{ steps.get-ip.outputs.vm_ip }}
           EMAIL="${{ secrets.EMAIL_ADDRESS }}"
-          DOMAIN="${{ vars.DOMAIN_NAME }}"
+          DOMAIN="${DOMAIN_NAME}"
           
           echo "Setting up SSL certificates for domain: $DOMAIN"
           
