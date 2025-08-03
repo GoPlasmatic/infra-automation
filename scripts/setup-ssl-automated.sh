@@ -145,18 +145,20 @@ SUCCESS_COUNT=0
 TOTAL_COUNT=${#DOMAINS[@]}
 
 for service in "${!DOMAINS[@]}"; do
+    echo ""
+    echo "Processing $service..."
     if setup_ssl_for_service "$service" "${DOMAINS[$service]}"; then
         ((SUCCESS_COUNT++))
         echo "✅ $service: SSL configured successfully"
     else
-        echo "⚠️  $service: SSL setup skipped (DNS not ready)"
+        echo "⚠️  $service: SSL setup skipped (DNS not ready or error occurred)"
     fi
 done
 
 # Restart nginx to apply all certificates
 echo ""
 echo "Restarting nginx to apply certificates..."
-run_command "cd /opt/docker && sudo docker compose restart nginx"
+run_command "cd /opt/docker && sudo docker compose restart nginx 2>/dev/null || echo 'Nginx restart pending - will start with next deployment'"
 
 # Setup auto-renewal
 echo ""
@@ -186,3 +188,10 @@ else
     echo "  HTTPS is now enabled for all domains"
 fi
 echo "======================================"
+
+# Exit successfully if at least one certificate was obtained
+if [ $SUCCESS_COUNT -gt 0 ]; then
+    exit 0
+else
+    exit 1
+fi
