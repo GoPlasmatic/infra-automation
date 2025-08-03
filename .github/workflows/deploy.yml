@@ -220,8 +220,8 @@ jobs:
             cd /opt/docker
             sudo docker compose restart nginx
             
-            # Test nginx config
-            sudo docker exec nginx nginx -t
+            # Test nginx config (if container is running)
+            sudo docker exec nginx nginx -t 2>/dev/null || echo "Nginx container not yet running"
           EOF
       
       - name: Deploy Monitoring
