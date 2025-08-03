@@ -11,8 +11,12 @@ This document lists all the GitHub Secrets and Variables required for automated 
 | AZURE_CREDENTIALS | ✅ | Already available at org level |
 | SSH_PUBLIC_KEY | ✅ | For VM access |
 | SSH_PRIVATE_KEY | ✅ | For deployment |
-| VM_ADMIN_USERNAME | ✅ | Default: azureuser |
+| VM_ADMIN_USERNAME | ✅ | Current: plasmaticadmin |
 | EMAIL_ADDRESS | ✅ | For Let's Encrypt SSL certificates |
+| MAILGUN_SMTP_PASSWORD | ✅ | For email sending |
+| GHOST_MYSQL_ROOT_PASSWORD | ⭕ | Optional, auto-generated if not set |
+| GHOST_MYSQL_PASSWORD | ⭕ | Optional, auto-generated if not set |
+| GRAFANA_ADMIN_PASSWORD | ⭕ | Optional, auto-generated if not set |
 
 ## GitHub Actions Deployment
 
@@ -79,6 +83,21 @@ Email address for Let's Encrypt SSL certificates. This is required as SSL setup 
 your-email@domain.com
 ```
 **Note**: SSL certificates are automatically configured during deployment. Use a valid email address as Let's Encrypt will send certificate expiration notices here.
+
+### 6. MAILGUN_SMTP_PASSWORD 🔴 (MANDATORY)
+Your Mailgun SMTP password for email sending functionality.
+- Found in Mailgun dashboard: Sending → Domain Settings → SMTP credentials
+- This is NOT the API key - it's the SMTP password
+- Required for Ghost to send invitation emails, password resets, etc.
+
+### 7. GHOST_MYSQL_ROOT_PASSWORD (Optional)
+MySQL root password for Ghost database. If not provided, a secure password will be auto-generated.
+
+### 8. GHOST_MYSQL_PASSWORD (Optional)
+MySQL user password for Ghost database. If not provided, a secure password will be auto-generated.
+
+### 9. GRAFANA_ADMIN_PASSWORD (Optional)
+Grafana admin panel password. If not provided, a secure password will be auto-generated.
 
 ## Required GitHub Variables (Repository Settings > Secrets and variables > Variables)
 

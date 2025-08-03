@@ -138,21 +138,32 @@ jobs:
           # Copy all Docker configuration files
           scp -i ~/.ssh/deploy_key -r docker/* ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/docker/
           
+          # Copy and substitute secrets in .env file
+          cp docker/.env /tmp/.env
+          sed -i "s/\${MAILGUN_SMTP_PASSWORD}/${{ secrets.MAILGUN_SMTP_PASSWORD }}/g" /tmp/.env
+          sed -i "s/\${GHOST_MYSQL_ROOT_PASSWORD}/${{ secrets.GHOST_MYSQL_ROOT_PASSWORD || 'ajQtVKFljU8PhSUCgtaOtGFzh' }}/g" /tmp/.env
+          sed -i "s/\${GHOST_MYSQL_PASSWORD}/${{ secrets.GHOST_MYSQL_PASSWORD || 'mvconhsataCnVifw8YL99bofl' }}/g" /tmp/.env
+          sed -i "s/\${GRAFANA_ADMIN_PASSWORD}/${{ secrets.GRAFANA_ADMIN_PASSWORD || '7C3bef505bEq2lzCVpvk4yP8U' }}/g" /tmp/.env
+          scp -i ~/.ssh/deploy_key /tmp/.env ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/docker/.env
+          rm /tmp/.env
+          
           # Setup directories and move files
           ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
             set -e
             
             # Create required directories
-            sudo mkdir -p /opt/docker/{nginx/sites-enabled,nginx/snippets,prometheus,grafana}
+            sudo mkdir -p /opt/docker/{nginx/sites-enabled,nginx/snippets,prometheus,grafana/provisioning/datasources}
             sudo mkdir -p /opt/ghost /opt/website
             sudo mkdir -p /var/www/certbot
             
             # Move Docker files to proper location
             sudo cp -r ~/docker/* /opt/docker/
+            sudo cp ~/docker/.env /opt/docker/.env
             
             # Set permissions
             sudo chown -R $USER:docker /opt/docker
             sudo chmod -R 755 /opt/docker
+            sudo chmod 640 /opt/docker/.env
             
             echo "Initial setup completed"
           EOF
