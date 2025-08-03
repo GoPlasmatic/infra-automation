@@ -8,16 +8,6 @@ echo "==================================="
 echo "Terraform State Storage Bootstrap"
 echo "==================================="
 
-# Cleanup function to ensure temp files are removed
-cleanup() {
-    echo "Cleaning up temporary files..."
-    rm -f main-bootstrap.tf state-storage-temp.tf variables-temp.tf
-    mv main.tf.backup main.tf 2>/dev/null || true
-}
-
-# Set trap to cleanup on exit
-trap cleanup EXIT
-
 cd terraform
 
 # Check if backend-config.tf already exists
@@ -28,11 +18,17 @@ fi
 
 echo "Setting up Terraform state storage..."
 
-# Initialize Terraform without backend first
-mv main.tf main.tf.backup 2>/dev/null || true
+# Clean any existing temp files and state
+echo "Cleaning up any existing temporary files..."
+rm -f *-temp.tf main-bootstrap.tf backend-config.tf .terraform.lock.hcl
+rm -rf .terraform/
 
-# Create temporary main.tf without backend
-cat > main-bootstrap.tf << 'EOF'
+# Create a separate bootstrap directory
+mkdir -p bootstrap
+cd bootstrap
+
+# Create minimal terraform configuration for state storage only
+cat > main.tf << 'EOF'
 terraform {
   required_version = ">= 1.10"
   required_providers {
@@ -44,10 +40,6 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
-    local = {
-      source  = "hashicorp/local"
-      version = "~> 2.7"
-    }
   }
 }
 
@@ -58,22 +50,79 @@ provider "azurerm" {
     }
   }
 }
+
+variable "project_name" {
+  type    = string
+  default = "multi-app-server"
+}
+
+variable "environment" {
+  type    = string
+  default = "production"
+}
+
+variable "location" {
+  type    = string
+  default = "East US"
+}
+
+resource "random_string" "state_storage_suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+resource "azurerm_resource_group" "tfstate" {
+  name     = "${var.project_name}-tfstate-rg"
+  location = var.location
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    Purpose     = "Terraform State Storage"
+  }
+}
+
+resource "azurerm_storage_account" "tfstate" {
+  name                     = "tfstate${random_string.state_storage_suffix.result}"
+  resource_group_name      = azurerm_resource_group.tfstate.name
+  location                 = azurerm_resource_group.tfstate.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  
+  min_tls_version                 = "TLS1_2"
+  enable_https_traffic_only       = true
+  allow_nested_items_to_be_public = false
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+    Purpose     = "Terraform State Storage"
+  }
+}
+
+resource "azurerm_storage_container" "tfstate" {
+  name                  = "tfstate"
+  storage_account_name  = azurerm_storage_account.tfstate.name
+  container_access_type = "private"
+}
+
+output "tfstate_resource_group" {
+  value = azurerm_resource_group.tfstate.name
+}
+
+output "tfstate_storage_account" {
+  value = azurerm_storage_account.tfstate.name
+}
+
+output "tfstate_container" {
+  value = azurerm_storage_container.tfstate.name
+}
 EOF
 
-# Clean any existing temp files first
-rm -f state-storage-temp.tf variables-temp.tf
-
-# Copy only the state storage configuration
-cp state-storage.tf state-storage-temp.tf
-cp variables.tf variables-temp.tf
-
-# Initialize and apply only state storage
-terraform init -reconfigure
+# Initialize and apply in bootstrap directory
+terraform init
 terraform apply -auto-approve \
-  -target=azurerm_resource_group.tfstate \
-  -target=azurerm_storage_account.tfstate \
-  -target=azurerm_storage_container.tfstate \
-  -target=random_string.state_storage_suffix \
   -var="project_name=${PROJECT_NAME:-multi-app-server}" \
   -var="environment=${ENVIRONMENT:-production}" \
   -var="location=${AZURE_LOCATION:-East US}"
@@ -88,7 +137,10 @@ echo "  Resource Group: $RESOURCE_GROUP"
 echo "  Storage Account: $STORAGE_ACCOUNT"
 echo "  Container: $CONTAINER"
 
-# Create backend configuration
+# Go back to main terraform directory
+cd ..
+
+# Create backend configuration in main terraform directory
 cat > backend-config.tf << EOF
 # Auto-generated backend configuration
 terraform {
@@ -102,13 +154,8 @@ terraform {
 EOF
 
 echo "Backend configuration created successfully!"
-echo "Now initializing Terraform with backend..."
 
-# Re-initialize with backend
-terraform init -force-copy \
-  -backend-config="resource_group_name=$RESOURCE_GROUP" \
-  -backend-config="storage_account_name=$STORAGE_ACCOUNT" \
-  -backend-config="container_name=$CONTAINER" \
-  -backend-config="key=terraform.tfstate"
+# Clean up bootstrap directory
+rm -rf bootstrap/
 
 echo "Bootstrap complete! State storage is configured."

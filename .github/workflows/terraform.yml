@@ -57,11 +57,15 @@ jobs:
       
       - name: Clean up any leftover temp files
         run: |
+          echo "Aggressive cleanup of Terraform files..."
           if [ -d "terraform" ]; then
             cd terraform
-            rm -f *-temp.tf main-bootstrap.tf backend-config.tf
-            rm -f .terraform.lock.hcl
-            rm -rf .terraform/
+            # Remove all possible temp files
+            rm -f *-temp.tf *.backup main-bootstrap.tf backend-config.tf
+            rm -f .terraform.lock.hcl terraform.tfstate*
+            rm -rf .terraform/ bootstrap/
+            echo "Cleanup completed"
+            ls -la
           else
             echo "Terraform directory not found, skipping cleanup"
           fi
