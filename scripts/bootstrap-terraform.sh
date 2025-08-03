@@ -16,6 +16,38 @@ if [ -f "backend-config.tf" ]; then
     exit 0
 fi
 
+# Check if state storage resources already exist in Azure
+PROJECT_NAME="${PROJECT_NAME:-multi-app-server}"
+RESOURCE_GROUP="${PROJECT_NAME}-tfstate-rg"
+
+echo "Checking if state storage already exists..."
+if az group show --name "$RESOURCE_GROUP" &>/dev/null; then
+    echo "State storage resource group already exists."
+    
+    # Get storage account name
+    STORAGE_ACCOUNT=$(az storage account list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv)
+    
+    if [ -n "$STORAGE_ACCOUNT" ]; then
+        echo "Found existing storage account: $STORAGE_ACCOUNT"
+        
+        # Create backend configuration with existing resources
+        cat > backend-config.tf << EOF
+# Auto-generated backend configuration
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "$RESOURCE_GROUP"
+    storage_account_name = "$STORAGE_ACCOUNT"
+    container_name       = "tfstate"
+    key                  = "terraform.tfstate"
+  }
+}
+EOF
+        
+        echo "Backend configuration created with existing resources!"
+        exit 0
+    fi
+fi
+
 echo "Setting up Terraform state storage..."
 
 # Clean any existing temp files and state
