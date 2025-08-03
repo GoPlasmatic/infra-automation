@@ -82,7 +82,8 @@ resource "azurerm_network_security_group" "main" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "22"
-    source_address_prefixes    = var.allowed_ssh_ips
+    source_address_prefix      = length(var.allowed_ssh_ips) > 0 ? null : "*"
+    source_address_prefixes    = length(var.allowed_ssh_ips) > 0 ? var.allowed_ssh_ips : null
     destination_address_prefix = "*"
   }
 
@@ -216,13 +217,13 @@ resource "azurerm_storage_account" "main" {
 # Storage container for backups
 resource "azurerm_storage_container" "backups" {
   name                  = "backups"
-  storage_account_name  = azurerm_storage_account.main.name
+  storage_account_id    = azurerm_storage_account.main.id
   container_access_type = "private"
 }
 
 # Storage container for Ghost media (if needed)
 resource "azurerm_storage_container" "media" {
   name                  = "media"
-  storage_account_name  = azurerm_storage_account.main.name
+  storage_account_id    = azurerm_storage_account.main.id
   container_access_type = "private"
 }
