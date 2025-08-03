@@ -125,7 +125,7 @@ setup_ssl_for_service() {
     fi
     
     # Set permissions
-    run_command "sudo chmod 644 /opt/docker/nginx/ssl/*.pem"
+    run_command "sudo chmod 644 /opt/docker/nginx/ssl/*.pem 2>/dev/null || true"
     
     echo "SSL setup complete for $service"
     return 0
