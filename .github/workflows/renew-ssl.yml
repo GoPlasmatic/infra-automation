@@ -1,0 +1,135 @@
+name: Renew SSL Certificates
+# Manual workflow to renew SSL certificates when needed
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_renewal:
+        description: 'Force renewal even if certificates are valid'
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    # Run every Monday at 2 AM UTC to check for expiring certificates
+    - cron: '0 2 * * 1'
+
+env:
+  DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+
+jobs:
+  renew-ssl:
+    name: Renew SSL Certificates
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure Azure credentials
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Get VM IP
+        id: get-ip
+        run: |
+          # Get IP from Azure
+          PROJECT_NAME="${{ vars.PROJECT_NAME || 'ghost-cms' }}"
+          ENVIRONMENT="${{ vars.ENVIRONMENT || 'production' }}"
+          VM_IP=$(az vm show -d -g ${PROJECT_NAME}-${ENVIRONMENT}-rg -n ${PROJECT_NAME}-${ENVIRONMENT}-vm --query publicIps -o tsv 2>/dev/null || echo "")
+          
+          if [ -z "$VM_IP" ]; then
+            echo "Error: Could not determine VM IP"
+            exit 1
+          fi
+          
+          echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ steps.get-ip.outputs.vm_ip }} >> ~/.ssh/known_hosts
+      
+      - name: Check Certificate Status
+        id: check-certs
+        run: |
+          VM_IP=${{ steps.get-ip.outputs.vm_ip }}
+          DOMAIN="${DOMAIN_NAME}"
+          
+          echo "Checking SSL certificates for $DOMAIN..."
+          
+          # Check certificate status
+          CERT_STATUS=$(ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP << EOF || echo "ERROR"
+            if [ -f /etc/letsencrypt/live/www.${DOMAIN}/fullchain.pem ]; then
+              # Get expiry date
+              EXPIRY=$(openssl x509 -enddate -noout -in /etc/letsencrypt/live/www.${DOMAIN}/fullchain.pem | cut -d= -f2)
+              echo "Certificate expires: \$EXPIRY"
+              
+              # Check if expiring within 30 days
+              if openssl x509 -checkend 2592000 -noout -in /etc/letsencrypt/live/www.${DOMAIN}/fullchain.pem 2>/dev/null; then
+                echo "STATUS=VALID"
+              else
+                echo "STATUS=EXPIRING"
+              fi
+            else
+              echo "STATUS=MISSING"
+            fi
+          EOF
+          )
+          
+          echo "$CERT_STATUS"
+          
+          # Extract status
+          if echo "$CERT_STATUS" | grep -q "STATUS=VALID"; then
+            echo "needs_renewal=false" >> $GITHUB_OUTPUT
+          else
+            echo "needs_renewal=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Renew SSL Certificates
+        if: steps.check-certs.outputs.needs_renewal == 'true' || github.event.inputs.force_renewal == 'true'
+        run: |
+          VM_IP=${{ steps.get-ip.outputs.vm_ip }}
+          EMAIL="${{ secrets.EMAIL_ADDRESS }}"
+          DOMAIN="${DOMAIN_NAME}"
+          
+          if [ "${{ github.event.inputs.force_renewal }}" = "true" ]; then
+            echo "⚡ Force renewal requested"
+          else
+            echo "🔄 Certificates need renewal"
+          fi
+          
+          # Copy SSL setup script to server
+          scp -i ~/.ssh/deploy_key scripts/setup-ssl-automated.sh ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP:~/
+          
+          # Run SSL renewal
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP << EOF
+            chmod +x ~/setup-ssl-automated.sh
+            
+            # If force renewal, temporarily move existing certs
+            if [ "${{ github.event.inputs.force_renewal }}" = "true" ]; then
+              echo "Moving existing certificates for force renewal..."
+              sudo mv /etc/letsencrypt/live /etc/letsencrypt/live.backup.$$ 2>/dev/null || true
+            fi
+            
+            # Run setup
+            ~/setup-ssl-automated.sh $VM_IP "$EMAIL" "$DOMAIN"
+            
+            # Restart nginx to apply new certificates
+            cd /opt/docker && sudo docker compose restart nginx
+          EOF
+          
+          echo "✅ SSL renewal completed"
+      
+      - name: Skip Renewal
+        if: steps.check-certs.outputs.needs_renewal == 'false' && github.event.inputs.force_renewal != 'true'
+        run: |
+          echo "✓ SSL certificates are valid and not expiring soon."
+          echo "No renewal needed at this time."
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key

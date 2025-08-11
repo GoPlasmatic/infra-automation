@@ -369,23 +369,50 @@ jobs:
           echo "Health checks completed. Services should be accessible via domain names after DNS propagation."
       
       - name: Setup SSL Certificates
+        if: github.event_name == 'workflow_run'  # Only run on initial infrastructure deployment
         run: |
           VM_IP=${{ steps.get-ip.outputs.vm_ip }}
           EMAIL="${{ secrets.EMAIL_ADDRESS }}"
           DOMAIN="${DOMAIN_NAME}"
           
-          echo "Setting up SSL certificates for domain: $DOMAIN"
+          echo "Checking SSL certificates status..."
           
-          # Copy SSL setup script to server
-          scp -i ~/.ssh/deploy_key scripts/setup-ssl-automated.sh ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP:~/
-          
-          # Run SSL setup
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP << EOF
-            chmod +x ~/setup-ssl-automated.sh
-            ~/setup-ssl-automated.sh $VM_IP "$EMAIL" "$DOMAIN"
+          # Check if certificates already exist and are valid
+          CERT_CHECK=$(ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP << 'EOF' || echo "NEEDS_SETUP"
+            # Check if main certificate exists and is valid
+            if [ -f /etc/letsencrypt/live/www.${DOMAIN_NAME}/fullchain.pem ]; then
+              # Check expiry date (renew if less than 30 days remaining)
+              if openssl x509 -checkend 2592000 -noout -in /etc/letsencrypt/live/www.${DOMAIN_NAME}/fullchain.pem 2>/dev/null; then
+                echo "VALID"
+              else
+                echo "EXPIRING_SOON"
+              fi
+            else
+              echo "NEEDS_SETUP"
+            fi
           EOF
+          )
           
-          echo "SSL setup completed"
+          if [ "$CERT_CHECK" = "VALID" ]; then
+            echo "✓ SSL certificates are valid and not expiring soon. Skipping renewal."
+          else
+            if [ "$CERT_CHECK" = "EXPIRING_SOON" ]; then
+              echo "⚠ SSL certificates expiring within 30 days. Renewing..."
+            else
+              echo "📋 Setting up SSL certificates for the first time..."
+            fi
+            
+            # Copy SSL setup script to server
+            scp -i ~/.ssh/deploy_key scripts/setup-ssl-automated.sh ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP:~/
+            
+            # Run SSL setup
+            ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP << EOF
+              chmod +x ~/setup-ssl-automated.sh
+              ~/setup-ssl-automated.sh $VM_IP "$EMAIL" "$DOMAIN"
+          EOF
+            
+            echo "SSL setup completed"
+          fi
       
       - name: Cleanup
         if: always()

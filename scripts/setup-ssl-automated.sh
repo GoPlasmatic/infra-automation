@@ -86,8 +86,20 @@ setup_ssl_for_service() {
     run_command "sudo mkdir -p /var/www/certbot"
     run_command "sudo mkdir -p /opt/docker/nginx/ssl"
     
-    # Try webroot method first (nginx must be running)
-    if ! run_command "sudo certbot certonly --webroot --webroot-path=/var/www/certbot --non-interactive --agree-tos --email $EMAIL --expand --force-renewal $domain_flags 2>/dev/null"; then
+    # Check if certificate already exists and is valid
+    local cert_path="/etc/letsencrypt/live/$primary_domain/fullchain.pem"
+    if run_command "[ -f $cert_path ]"; then
+        # Check if certificate is still valid for more than 30 days
+        if run_command "openssl x509 -checkend 2592000 -noout -in $cert_path 2>/dev/null"; then
+            echo "Certificate for $service is valid for more than 30 days. Skipping renewal."
+            return 0
+        else
+            echo "Certificate for $service expiring soon. Renewing..."
+        fi
+    fi
+    
+    # Try webroot method first (nginx must be running) - removed --force-renewal flag
+    if ! run_command "sudo certbot certonly --webroot --webroot-path=/var/www/certbot --non-interactive --agree-tos --email $EMAIL --expand $domain_flags 2>/dev/null"; then
         # If webroot fails, stop ALL services using port 80 and try standalone
         echo "Webroot method failed, stopping services and trying standalone..."
         
@@ -100,8 +112,8 @@ setup_ssl_for_service() {
         # Wait for port to be free
         run_command "sleep 5"
         
-        # Try standalone method
-        if ! run_command "sudo certbot certonly --standalone --non-interactive --agree-tos --email $EMAIL --expand --force-renewal $domain_flags"; then
+        # Try standalone method (without force-renewal to respect rate limits)
+        if ! run_command "sudo certbot certonly --standalone --non-interactive --agree-tos --email $EMAIL --expand $domain_flags"; then
             echo "ERROR: Failed to obtain certificate for $service"
             # Restart services anyway
             run_command "cd /opt/docker && sudo docker compose start nginx 2>/dev/null || true"
