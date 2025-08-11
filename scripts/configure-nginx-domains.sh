@@ -41,6 +41,12 @@ if [ -f "ghost-admin.conf" ]; then
     sudo sed -i "s/goplasmatic\.io/${DOMAIN_NAME}/g" ghost-admin.conf
 fi
 
+# Update reframeapi.conf
+if [ -f "reframeapi.conf" ]; then
+    echo "Updating reframeapi.conf..."
+    sudo sed -i "s/goplasmatic\.io/${DOMAIN_NAME}/g" reframeapi.conf
+fi
+
 # Update Ghost environment variables in docker-compose.yml
 cd /opt/docker
 if [ -f "docker-compose.yml" ]; then

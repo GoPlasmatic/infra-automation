@@ -29,6 +29,7 @@ jobs:
       nginx: ${{ steps.changes.outputs.nginx }}
       monitoring: ${{ steps.changes.outputs.monitoring }}
       ghost: ${{ steps.changes.outputs.ghost }}
+      reframe: ${{ steps.changes.outputs.reframe }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -55,6 +56,7 @@ jobs:
           echo "nginx=$(check_changes 'docker/nginx/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
           echo "monitoring=$(check_changes 'docker/prometheus/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
           echo "ghost=$(check_changes 'docker/ghost/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+          echo "reframe=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
 
   build-and-deploy:
     name: Build and Deploy
@@ -153,7 +155,7 @@ jobs:
             
             # Create required directories
             sudo mkdir -p /opt/docker/{nginx/sites-enabled,nginx/snippets,prometheus,grafana/provisioning/datasources}
-            sudo mkdir -p /opt/ghost /opt/website
+            sudo mkdir -p /opt/ghost /opt/website /opt/reframe
             sudo mkdir -p /var/www/certbot
             
             # Move Docker files to proper location
@@ -283,6 +285,38 @@ jobs:
             sudo mv /opt/docker/nginx/sites-enabled/future.conf.disabled /opt/docker/nginx/sites-enabled/future.conf || true
             
             sudo docker compose restart nginx
+          EOF
+      
+      - name: Deploy Reframe
+        if: needs.detect-changes.outputs.reframe == 'true' || github.event_name == 'workflow_run'
+        run: |
+          echo "Deploying Reframe API..."
+          
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+            set -e
+            
+            # Clone or update Reframe repository
+            cd /opt
+            if [ -d "reframe/.git" ]; then
+              echo "Updating existing Reframe repository..."
+              cd reframe && sudo git pull
+            else
+              echo "Cloning Reframe repository..."
+              sudo git clone https://github.com/GoPlasmatic/Reframe.git reframe
+              sudo chown -R $USER:$USER reframe
+            fi
+            
+            # Build and start Reframe container
+            cd /opt/docker
+            sudo docker compose build reframe
+            sudo docker compose up -d reframe
+            
+            # Health check
+            sleep 10
+            sudo docker ps | grep reframe || echo "Warning: Reframe container not running"
+            
+            # Test API endpoint
+            curl -f -s -o /dev/null -w "Reframe API: %{http_code}\n" http://localhost:3000/health || true
           EOF
       
       - name: Run health checks

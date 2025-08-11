@@ -96,6 +96,30 @@ services:
       timeout: 5s
       retries: 5
 
+  # Reframe API - SWIFT Message Transformation Engine
+  reframe:
+    build:
+      context: /opt/reframe
+      dockerfile: Dockerfile
+    container_name: reframe_api
+    restart: always
+    expose:
+      - "3000"
+    networks:
+      - proxy_network
+    environment:
+      - RUST_LOG=info
+      - REFRAME_PORT=3000
+    volumes:
+      - /opt/reframe/workflows:/app/workflows:ro
+      - /opt/reframe/scenarios:/app/scenarios:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
 
 
   # Monitoring with Prometheus
