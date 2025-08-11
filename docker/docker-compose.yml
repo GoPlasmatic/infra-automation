@@ -109,6 +109,7 @@ services:
     environment:
       - RUST_LOG=info
       - REFRAME_PORT=3000
+      - API_SERVER_URL=https://reframeapi.goplasmatic.io
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
