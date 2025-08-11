@@ -100,6 +100,9 @@ sudo docker compose -f /opt/docker/docker-compose.yml restart <service>
 - `SSH_PRIVATE_KEY`: For deployment
 - `VM_ADMIN_USERNAME`: Default: azureuser
 - `EMAIL_ADDRESS`: For Let's Encrypt SSL
+- `ACR_URL`: Azure Container Registry URL (org level)
+- `ACR_USERNAME`: ACR username (org level)
+- `ACR_PASSWORD`: ACR password (org level)
 
 **Mandatory Variables:**
 - `DOMAIN_NAME`: Your domain (e.g., example.com)

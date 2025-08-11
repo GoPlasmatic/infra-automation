@@ -134,6 +134,10 @@ jobs:
           ssh-keyscan -H ${{ steps.get-ip.outputs.vm_ip }} >> ~/.ssh/known_hosts
       
       - name: Initial VM Setup
+        env:
+          ACR_URL: ${{ secrets.ACR_URL }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
         run: |
           echo "Setting up initial directories and Docker configuration..."
           
@@ -146,16 +150,18 @@ jobs:
           sed -i "s/\${GHOST_MYSQL_ROOT_PASSWORD}/${{ secrets.GHOST_MYSQL_ROOT_PASSWORD || 'ajQtVKFljU8PhSUCgtaOtGFzh' }}/g" /tmp/.env
           sed -i "s/\${GHOST_MYSQL_PASSWORD}/${{ secrets.GHOST_MYSQL_PASSWORD || 'mvconhsataCnVifw8YL99bofl' }}/g" /tmp/.env
           sed -i "s/\${GRAFANA_ADMIN_PASSWORD}/${{ secrets.GRAFANA_ADMIN_PASSWORD || '7C3bef505bEq2lzCVpvk4yP8U' }}/g" /tmp/.env
+          # Add ACR URL to .env
+          echo "ACR_URL=${ACR_URL}" >> /tmp/.env
           scp -i ~/.ssh/deploy_key /tmp/.env ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/docker/.env
           rm /tmp/.env
           
           # Setup directories and move files
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
             set -e
             
             # Create required directories
             sudo mkdir -p /opt/docker/{nginx/sites-enabled,nginx/snippets,prometheus,grafana/provisioning/datasources}
-            sudo mkdir -p /opt/ghost /opt/website /opt/reframe
+            sudo mkdir -p /opt/ghost /opt/website
             sudo mkdir -p /var/www/certbot
             
             # Move Docker files to proper location
@@ -163,9 +169,15 @@ jobs:
             sudo cp ~/docker/.env /opt/docker/.env
             
             # Set permissions
-            sudo chown -R $USER:docker /opt/docker
+            sudo chown -R \$USER:docker /opt/docker
             sudo chmod -R 755 /opt/docker
             sudo chmod 640 /opt/docker/.env
+            
+            # Login to Azure Container Registry
+            echo "Logging into Azure Container Registry..."
+            echo "${ACR_PASSWORD}" | sudo docker login ${ACR_URL} \
+              --username ${ACR_USERNAME} \
+              --password-stdin
             
             echo "Initial setup completed"
           EOF
@@ -287,38 +299,56 @@ jobs:
             sudo docker compose restart nginx
           EOF
       
-      # Reframe deployment disabled due to server crash issue
-      # - name: Deploy Reframe
-      #   if: needs.detect-changes.outputs.reframe == 'true' || github.event_name == 'workflow_run'
-      #   run: |
-      #     echo "Deploying Reframe API..."
-      #     
-      #     ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
-      #       set -e
-      #       
-      #       # Clone or update Reframe repository
-      #       cd /opt
-      #       if [ -d "reframe/.git" ]; then
-      #         echo "Updating existing Reframe repository..."
-      #         cd reframe && sudo git pull
-      #       else
-      #         echo "Cloning Reframe repository..."
-      #         sudo git clone https://github.com/GoPlasmatic/Reframe.git reframe
-      #         sudo chown -R $USER:$USER reframe
-      #       fi
-      #       
-      #       # Build and start Reframe container
-      #       cd /opt/docker
-      #       sudo docker compose build reframe
-      #       sudo docker compose up -d reframe
-      #       
-      #       # Health check
-      #       sleep 10
-      #       sudo docker ps | grep reframe || echo "Warning: Reframe container not running"
-      #       
-      #       # Test API endpoint
-      #       curl -f -s -o /dev/null -w "Reframe API: %{http_code}\n" http://localhost:3000/health || true
-      #     EOF
+      - name: Deploy Reframe
+        if: needs.detect-changes.outputs.reframe == 'true' || github.event_name == 'workflow_run'
+        env:
+          ACR_URL: ${{ secrets.ACR_URL }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          echo "Deploying Reframe API from Azure Container Registry..."
+          
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
+            set -e
+            
+            # Login to Azure Container Registry
+            echo "Logging into Azure Container Registry..."
+            echo "${ACR_PASSWORD}" | sudo docker login ${ACR_URL} \
+              --username ${ACR_USERNAME} \
+              --password-stdin
+            
+            # Update .env file with ACR URL
+            echo "ACR_URL=${ACR_URL}" | sudo tee -a /opt/docker/.env > /dev/null
+            
+            # Pull latest Reframe image
+            echo "Pulling latest Reframe image from ACR..."
+            sudo docker pull ${ACR_URL}/reframe:latest
+            
+            # Start Reframe container using docker-compose
+            cd /opt/docker
+            sudo docker compose up -d reframe
+            
+            # Health check
+            echo "Waiting for Reframe to start..."
+            sleep 15
+            
+            # Check if container is running
+            if sudo docker ps | grep -q reframe_api; then
+              echo "✓ Reframe container is running"
+              
+              # Test API endpoint
+              if curl -f -s -o /dev/null -w "Reframe API Health: %{http_code}\n" http://localhost:3000/health; then
+                echo "✓ Reframe API is responding"
+              else
+                echo "⚠ Reframe API health check failed"
+                sudo docker logs reframe_api --tail 50
+              fi
+            else
+              echo "✗ Reframe container failed to start"
+              sudo docker logs reframe_api --tail 50
+              exit 1
+            fi
+          EOF
       
       - name: Run health checks
         run: |
