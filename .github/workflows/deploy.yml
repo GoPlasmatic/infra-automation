@@ -379,7 +379,7 @@ jobs:
               echo "✓ Sandbox container is running"
               
               # Test website endpoint
-              if curl -f -s -o /dev/null -w "Sandbox Website: %{http_code}\n" http://localhost:80; then
+              if curl -f -s -o /dev/null -w "Sandbox Website: %{http_code}\n" http://localhost:3000; then
                 echo "✓ Sandbox website is responding"
               else
                 echo "⚠ Sandbox website health check failed"

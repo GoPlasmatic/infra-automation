@@ -39,6 +39,6 @@ scrape_configs:
 
   - job_name: 'sandbox'
     static_configs:
-      - targets: ['sandbox:80']
+      - targets: ['sandbox:3000']
         labels:
           service: 'sandbox'

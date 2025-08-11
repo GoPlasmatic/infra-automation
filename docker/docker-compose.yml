@@ -124,14 +124,14 @@ services:
     restart: always
     pull_policy: always  # Always pull latest image
     expose:
-      - "80"
+      - "3000"
     networks:
       - proxy_network
     environment:
       - NODE_ENV=production
       - REFRAME_API_URL=https://reframeapi.goplasmatic.io
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
       interval: 30s
       timeout: 3s
       start_period: 30s
