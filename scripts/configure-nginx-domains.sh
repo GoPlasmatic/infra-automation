@@ -47,13 +47,20 @@ if [ -f "reframeapi.conf" ]; then
     sudo sed -i "s/goplasmatic\.io/${DOMAIN_NAME}/g" reframeapi.conf
 fi
 
-# Update Ghost and Reframe environment variables in docker-compose.yml
+# Update sandbox.conf
+if [ -f "sandbox.conf" ]; then
+    echo "Updating sandbox.conf..."
+    sudo sed -i "s/goplasmatic\.io/${DOMAIN_NAME}/g" sandbox.conf
+fi
+
+# Update Ghost, Reframe and Sandbox environment variables in docker-compose.yml
 cd /opt/docker
 if [ -f "docker-compose.yml" ]; then
     echo "Updating service URLs in docker-compose.yml..."
     sudo sed -i "s/future\.goplasmatic\.io/future.${DOMAIN_NAME}/g" docker-compose.yml
     sudo sed -i "s/webadmin\.goplasmatic\.io/webadmin.${DOMAIN_NAME}/g" docker-compose.yml
     sudo sed -i "s/reframeapi\.goplasmatic\.io/reframeapi.${DOMAIN_NAME}/g" docker-compose.yml
+    sudo sed -i "s/sandbox\.goplasmatic\.io/sandbox.${DOMAIN_NAME}/g" docker-compose.yml
 fi
 
 echo "Domain configuration complete!"

@@ -155,6 +155,7 @@ DOMAINS["grafana"]="grafana.${DOMAIN_NAME}"
 DOMAINS["future"]="future.${DOMAIN_NAME}"
 DOMAINS["webadmin"]="webadmin.${DOMAIN_NAME}"
 DOMAINS["reframeapi"]="reframeapi.${DOMAIN_NAME}"
+DOMAINS["sandbox"]="sandbox.${DOMAIN_NAME}"
 
 # Setup SSL for each service
 SUCCESS_COUNT=0

@@ -30,6 +30,7 @@ jobs:
       monitoring: ${{ steps.changes.outputs.monitoring }}
       ghost: ${{ steps.changes.outputs.ghost }}
       reframe: ${{ steps.changes.outputs.reframe }}
+      sandbox: ${{ steps.changes.outputs.sandbox }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -57,6 +58,7 @@ jobs:
           echo "monitoring=$(check_changes 'docker/prometheus/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
           echo "ghost=$(check_changes 'docker/ghost/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
           echo "reframe=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+          echo "sandbox=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
 
   build-and-deploy:
     name: Build and Deploy
@@ -346,6 +348,46 @@ jobs:
             else
               echo "✗ Reframe container failed to start"
               sudo docker logs reframe_api --tail 50
+              exit 1
+            fi
+          EOF
+      
+      - name: Deploy Sandbox
+        if: needs.detect-changes.outputs.sandbox == 'true' || github.event_name == 'workflow_run'
+        env:
+          ACR_URL: ${{ secrets.ACR_URL }}
+        run: |
+          echo "Deploying Sandbox website from Azure Container Registry..."
+          
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
+            set -e
+            
+            # Pull latest Sandbox image (ACR login already done in initial setup)
+            echo "Pulling latest Sandbox image from ACR..."
+            sudo docker pull ${ACR_URL}/sandbox:latest
+            
+            # Start Sandbox container using docker-compose
+            cd /opt/docker
+            sudo docker compose up -d sandbox
+            
+            # Health check
+            echo "Waiting for Sandbox to start..."
+            sleep 10
+            
+            # Check if container is running
+            if sudo docker ps | grep -q sandbox_website; then
+              echo "✓ Sandbox container is running"
+              
+              # Test website endpoint
+              if curl -f -s -o /dev/null -w "Sandbox Website: %{http_code}\n" http://localhost:80; then
+                echo "✓ Sandbox website is responding"
+              else
+                echo "⚠ Sandbox website health check failed"
+                sudo docker logs sandbox_website --tail 50
+              fi
+            else
+              echo "✗ Sandbox container failed to start"
+              sudo docker logs sandbox_website --tail 50
               exit 1
             fi
           EOF

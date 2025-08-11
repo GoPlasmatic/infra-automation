@@ -77,6 +77,7 @@ output "dns_instructions" {
     webadmin     → ${azurerm_public_ip.main.ip_address}
     future       → ${azurerm_public_ip.main.ip_address}
     reframeapi   → ${azurerm_public_ip.main.ip_address}
+    sandbox      → ${azurerm_public_ip.main.ip_address}
     
     DNS propagation takes 5-30 minutes typically.
     ====================================

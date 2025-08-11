@@ -36,3 +36,9 @@ scrape_configs:
       - targets: ['reframe:3000']
         labels:
           service: 'reframe'
+
+  - job_name: 'sandbox'
+    static_configs:
+      - targets: ['sandbox:80']
+        labels:
+          service: 'sandbox'
