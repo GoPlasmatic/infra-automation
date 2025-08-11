@@ -287,37 +287,38 @@ jobs:
             sudo docker compose restart nginx
           EOF
       
-      - name: Deploy Reframe
-        if: needs.detect-changes.outputs.reframe == 'true' || github.event_name == 'workflow_run'
-        run: |
-          echo "Deploying Reframe API..."
-          
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
-            set -e
-            
-            # Clone or update Reframe repository
-            cd /opt
-            if [ -d "reframe/.git" ]; then
-              echo "Updating existing Reframe repository..."
-              cd reframe && sudo git pull
-            else
-              echo "Cloning Reframe repository..."
-              sudo git clone https://github.com/GoPlasmatic/Reframe.git reframe
-              sudo chown -R $USER:$USER reframe
-            fi
-            
-            # Build and start Reframe container
-            cd /opt/docker
-            sudo docker compose build reframe
-            sudo docker compose up -d reframe
-            
-            # Health check
-            sleep 10
-            sudo docker ps | grep reframe || echo "Warning: Reframe container not running"
-            
-            # Test API endpoint
-            curl -f -s -o /dev/null -w "Reframe API: %{http_code}\n" http://localhost:3000/health || true
-          EOF
+      # Reframe deployment disabled due to server crash issue
+      # - name: Deploy Reframe
+      #   if: needs.detect-changes.outputs.reframe == 'true' || github.event_name == 'workflow_run'
+      #   run: |
+      #     echo "Deploying Reframe API..."
+      #     
+      #     ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+      #       set -e
+      #       
+      #       # Clone or update Reframe repository
+      #       cd /opt
+      #       if [ -d "reframe/.git" ]; then
+      #         echo "Updating existing Reframe repository..."
+      #         cd reframe && sudo git pull
+      #       else
+      #         echo "Cloning Reframe repository..."
+      #         sudo git clone https://github.com/GoPlasmatic/Reframe.git reframe
+      #         sudo chown -R $USER:$USER reframe
+      #       fi
+      #       
+      #       # Build and start Reframe container
+      #       cd /opt/docker
+      #       sudo docker compose build reframe
+      #       sudo docker compose up -d reframe
+      #       
+      #       # Health check
+      #       sleep 10
+      #       sudo docker ps | grep reframe || echo "Warning: Reframe container not running"
+      #       
+      #       # Test API endpoint
+      #       curl -f -s -o /dev/null -w "Reframe API: %{http_code}\n" http://localhost:3000/health || true
+      #     EOF
       
       - name: Run health checks
         run: |

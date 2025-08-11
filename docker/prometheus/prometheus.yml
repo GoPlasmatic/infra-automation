@@ -31,8 +31,9 @@ scrape_configs:
         labels:
           service: 'ghost'
 
-  - job_name: 'reframe'
-    static_configs:
-      - targets: ['reframe:3000']
-        labels:
-          service: 'reframe'
+  # Reframe monitoring disabled due to server crash issue
+  # - job_name: 'reframe'
+  #   static_configs:
+  #     - targets: ['reframe:3000']
+  #       labels:
+  #         service: 'reframe'

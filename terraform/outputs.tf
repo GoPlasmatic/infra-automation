@@ -34,6 +34,33 @@ output "storage_account_key" {
   sensitive   = true
 }
 
+output "acr_login_server" {
+  description = "The URL of the Azure Container Registry"
+  value       = azurerm_container_registry.main.login_server
+}
+
+output "acr_admin_username" {
+  description = "The admin username for Azure Container Registry"
+  value       = azurerm_container_registry.main.admin_username
+  sensitive   = true
+}
+
+output "acr_admin_password" {
+  description = "The admin password for Azure Container Registry"
+  value       = azurerm_container_registry.main.admin_password
+  sensitive   = true
+}
+
+output "acr_name" {
+  description = "The name of the Azure Container Registry"
+  value       = azurerm_container_registry.main.name
+}
+
+output "acr_resource_id" {
+  description = "The resource ID of the Azure Container Registry"
+  value       = azurerm_container_registry.main.id
+}
+
 output "dns_instructions" {
   description = "Instructions for DNS configuration"
   value = <<-EOT
