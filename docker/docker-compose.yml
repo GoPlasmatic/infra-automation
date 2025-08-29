@@ -137,8 +137,6 @@ services:
       start_period: 30s
       retries: 3
 
-
-
   # Monitoring with Prometheus
   prometheus:
     image: prom/prometheus:v2.54.1
