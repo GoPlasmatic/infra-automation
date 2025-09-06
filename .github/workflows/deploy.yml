@@ -16,6 +16,13 @@ on:
     workflows: ["Terraform Infrastructure"]
     types:
       - completed
+  workflow_dispatch:
+    inputs:
+      deploy_components:
+        description: 'Components to deploy (comma-separated: website,nginx,monitoring,ghost,reframe,sandbox or "all")'
+        required: false
+        default: 'reframe,sandbox'
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -42,29 +49,74 @@ jobs:
         run: |
           echo "Detecting changes..."
           
-          # Function to check if files changed
-          check_changes() {
-            local pattern=$1
-            if git diff --name-only HEAD~1 HEAD | grep -q "$pattern"; then
-              echo "true"
+          # For manual trigger, check the inputs
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "Manual trigger detected. Processing deploy_components input..."
+            COMPONENTS="${{ github.event.inputs.deploy_components }}"
+            
+            # Default to false for all components
+            WEBSITE="false"
+            NGINX="false"
+            MONITORING="false"
+            GHOST="false"
+            REFRAME="false"
+            SANDBOX="false"
+            
+            # Check if "all" was specified
+            if [ "$COMPONENTS" == "all" ]; then
+              WEBSITE="true"
+              NGINX="true"
+              MONITORING="true"
+              GHOST="true"
+              REFRAME="true"
+              SANDBOX="true"
             else
-              echo "false"
+              # Parse comma-separated components
+              IFS=',' read -ra COMP_ARRAY <<< "$COMPONENTS"
+              for comp in "${COMP_ARRAY[@]}"; do
+                comp=$(echo "$comp" | xargs)  # Trim whitespace
+                case "$comp" in
+                  website) WEBSITE="true" ;;
+                  nginx) NGINX="true" ;;
+                  monitoring) MONITORING="true" ;;
+                  ghost) GHOST="true" ;;
+                  reframe) REFRAME="true" ;;
+                  sandbox) SANDBOX="true" ;;
+                esac
+              done
             fi
-          }
-          
-          # Check each component
-          echo "website=$(check_changes 'docker/Dockerfile.website\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
-          echo "nginx=$(check_changes 'docker/nginx/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
-          echo "monitoring=$(check_changes 'docker/prometheus/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
-          echo "ghost=$(check_changes 'docker/ghost/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
-          echo "reframe=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
-          echo "sandbox=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+            
+            echo "website=$WEBSITE" >> $GITHUB_OUTPUT
+            echo "nginx=$NGINX" >> $GITHUB_OUTPUT
+            echo "monitoring=$MONITORING" >> $GITHUB_OUTPUT
+            echo "ghost=$GHOST" >> $GITHUB_OUTPUT
+            echo "reframe=$REFRAME" >> $GITHUB_OUTPUT
+            echo "sandbox=$SANDBOX" >> $GITHUB_OUTPUT
+          else
+            # Function to check if files changed
+            check_changes() {
+              local pattern=$1
+              if git diff --name-only HEAD~1 HEAD | grep -q "$pattern"; then
+                echo "true"
+              else
+                echo "false"
+              fi
+            }
+            
+            # Check each component
+            echo "website=$(check_changes 'docker/Dockerfile.website\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+            echo "nginx=$(check_changes 'docker/nginx/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+            echo "monitoring=$(check_changes 'docker/prometheus/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+            echo "ghost=$(check_changes 'docker/ghost/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+            echo "reframe=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+            echo "sandbox=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+          fi
 
   build-and-deploy:
     name: Build and Deploy
     needs: detect-changes
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     
     env:
       PROJECT_NAME: ${{ vars.PROJECT_NAME || 'multi-app-server' }}
