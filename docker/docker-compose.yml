@@ -19,7 +19,6 @@ services:
     networks:
       - proxy_network
     depends_on:
-      - website
       - ghost
     healthcheck:
       test: ["CMD", "nginx", "-t"]
@@ -27,22 +26,7 @@ services:
       timeout: 10s
       retries: 3
 
-  # Main Website - React/Vite Application
-  # Note: This will be replaced by Ghost CMS after migration
-  website:
-    build:
-      context: /opt/website
-      dockerfile: /opt/docker/Dockerfile.website
-    container_name: main_website
-    restart: always
-    expose:
-      - "80"
-    networks:
-      - proxy_network
-    environment:
-      - NODE_ENV=production
-
-  # Ghost CMS - Website Management System
+  # Ghost CMS - Main Website Management System
   ghost:
     image: ghost:5.119-alpine
     container_name: ghost_cms
@@ -50,7 +34,7 @@ services:
     expose:
       - "2368"
     environment:
-      url: https://future.goplasmatic.io
+      url: https://www.goplasmatic.io
       admin__url: https://webadmin.goplasmatic.io
       NODE_ENV: production
       database__client: mysql

@@ -152,7 +152,6 @@ echo "Starting SSL setup for all services..."
 declare -A DOMAINS
 DOMAINS["main"]="www.${DOMAIN_NAME} ${DOMAIN_NAME}"
 DOMAINS["grafana"]="grafana.${DOMAIN_NAME}"
-DOMAINS["future"]="future.${DOMAIN_NAME}"
 DOMAINS["webadmin"]="webadmin.${DOMAIN_NAME}"
 DOMAINS["reframeapi"]="reframeapi.${DOMAIN_NAME}"
 DOMAINS["sandbox"]="sandbox.${DOMAIN_NAME}"

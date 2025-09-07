@@ -29,11 +29,7 @@ if [ -f "grafana.conf" ]; then
     sudo sed -i "s/goplasmatic\.io/${DOMAIN_NAME}/g" grafana.conf
 fi
 
-# Update future.conf
-if [ -f "future.conf" ]; then
-    echo "Updating future.conf..."
-    sudo sed -i "s/goplasmatic\.io/${DOMAIN_NAME}/g" future.conf
-fi
+# Note: future.conf has been removed as Ghost is now the main website
 
 # Update ghost-admin.conf
 if [ -f "ghost-admin.conf" ]; then
@@ -57,7 +53,8 @@ fi
 cd /opt/docker
 if [ -f "docker-compose.yml" ]; then
     echo "Updating service URLs in docker-compose.yml..."
-    sudo sed -i "s/future\.goplasmatic\.io/future.${DOMAIN_NAME}/g" docker-compose.yml
+    # Ghost now uses www subdomain as main site
+    sudo sed -i "s/www\.goplasmatic\.io/www.${DOMAIN_NAME}/g" docker-compose.yml
     sudo sed -i "s/webadmin\.goplasmatic\.io/webadmin.${DOMAIN_NAME}/g" docker-compose.yml
     sudo sed -i "s/reframeapi\.goplasmatic\.io/reframeapi.${DOMAIN_NAME}/g" docker-compose.yml
     sudo sed -i "s/sandbox\.goplasmatic\.io/sandbox.${DOMAIN_NAME}/g" docker-compose.yml
