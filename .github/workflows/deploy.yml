@@ -98,12 +98,22 @@ jobs:
               fi
             }
             
-            # Check each component
-            echo "nginx=$(check_changes 'docker/nginx/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
-            echo "monitoring=$(check_changes 'docker/prometheus/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
-            echo "ghost=$(check_changes 'docker/ghost/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
-            echo "reframe=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
-            echo "sandbox=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+            # For push events, always deploy all components
+            if [ "${{ github.event_name }}" == "push" ]; then
+              echo "Push event detected - deploying all components"
+              echo "nginx=true" >> $GITHUB_OUTPUT
+              echo "monitoring=true" >> $GITHUB_OUTPUT
+              echo "ghost=true" >> $GITHUB_OUTPUT
+              echo "reframe=true" >> $GITHUB_OUTPUT
+              echo "sandbox=true" >> $GITHUB_OUTPUT
+            else
+              # Check each component for workflow_run
+              echo "nginx=$(check_changes 'docker/nginx/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+              echo "monitoring=$(check_changes 'docker/prometheus/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+              echo "ghost=$(check_changes 'docker/ghost/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+              echo "reframe=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+              echo "sandbox=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
+            fi
           fi
 
   build-and-deploy:
@@ -155,20 +165,29 @@ jobs:
             fi
           fi
           
-          # If still not found, get from Azure
+          # If still not found, get from Azure using default values
           if [ -z "$VM_IP" ]; then
             echo "Getting IP from Azure..."
+            # Use default values if not set
+            PROJECT_NAME=${PROJECT_NAME:-multi-app-server}
+            ENVIRONMENT=${ENVIRONMENT:-production}
             echo "Using PROJECT_NAME=${PROJECT_NAME}, ENVIRONMENT=${ENVIRONMENT}"
-            if [ -n "${PROJECT_NAME}" ] && [ -n "${ENVIRONMENT}" ]; then
-              VM_IP=$(az vm show -d -g ${PROJECT_NAME}-${ENVIRONMENT}-rg -n ${PROJECT_NAME}-${ENVIRONMENT}-vm --query publicIps -o tsv 2>/dev/null || echo "")
+            
+            # Try to get VM IP from Azure
+            VM_IP=$(az vm show -d -g ${PROJECT_NAME}-${ENVIRONMENT}-rg -n ${PROJECT_NAME}-${ENVIRONMENT}-vm --query publicIps -o tsv 2>/dev/null || echo "")
+            
+            if [ -n "$VM_IP" ]; then
+              echo "Found IP from Azure: $VM_IP"
             fi
           fi
           
-          # Final fallback - hardcode for now if all else fails
+          # Final check
           if [ -z "$VM_IP" ]; then
-            echo "Warning: Could not determine VM IP dynamically"
-            # You can uncomment the line below as a temporary workaround
-            # VM_IP="20.169.212.253"
+            echo "Error: Could not determine VM IP dynamically"
+            echo "Please ensure:"
+            echo "  1. DOMAIN_NAME variable is set in repository settings"
+            echo "  2. Azure credentials are configured correctly"
+            echo "  3. VM exists in the expected resource group"
             exit 1
           fi
           
@@ -244,7 +263,7 @@ jobs:
           EOF
       
       - name: Deploy Nginx
-        if: needs.detect-changes.outputs.nginx == 'true' || github.event_name == 'workflow_run'
+        if: needs.detect-changes.outputs.nginx == 'true'
         run: |
           echo "Deploying Nginx configuration..."
           
@@ -266,7 +285,7 @@ jobs:
           EOF
       
       - name: Deploy Monitoring
-        if: needs.detect-changes.outputs.monitoring == 'true' || github.event_name == 'workflow_run'
+        if: needs.detect-changes.outputs.monitoring == 'true'
         run: |
           echo "Deploying monitoring stack..."
           
@@ -286,7 +305,7 @@ jobs:
           EOF
       
       - name: Deploy Ghost
-        if: needs.detect-changes.outputs.ghost == 'true' || github.event_name == 'workflow_run'
+        if: needs.detect-changes.outputs.ghost == 'true'
         run: |
           echo "Deploying Ghost CMS..."
           
@@ -308,7 +327,7 @@ jobs:
           EOF
       
       - name: Deploy Reframe
-        if: needs.detect-changes.outputs.reframe == 'true' || github.event_name == 'workflow_run'
+        if: needs.detect-changes.outputs.reframe == 'true'
         env:
           ACR_URL: ${{ secrets.ACR_URL }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
@@ -359,7 +378,7 @@ jobs:
           EOF
       
       - name: Deploy Sandbox
-        if: needs.detect-changes.outputs.sandbox == 'true' || github.event_name == 'workflow_run'
+        if: needs.detect-changes.outputs.sandbox == 'true'
         env:
           ACR_URL: ${{ secrets.ACR_URL }}
         run: |
