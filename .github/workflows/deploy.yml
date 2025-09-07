@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_components:
-        description: 'Components to deploy (comma-separated: website,nginx,monitoring,ghost,reframe,sandbox or "all")'
+        description: 'Components to deploy (comma-separated: nginx,monitoring,ghost,reframe,sandbox or "all")'
         required: false
         default: 'reframe,sandbox'
         type: string
@@ -32,7 +32,6 @@ jobs:
     name: Detect Changes
     runs-on: ubuntu-latest
     outputs:
-      website: ${{ steps.changes.outputs.website }}
       nginx: ${{ steps.changes.outputs.nginx }}
       monitoring: ${{ steps.changes.outputs.monitoring }}
       ghost: ${{ steps.changes.outputs.ghost }}
@@ -55,7 +54,6 @@ jobs:
             COMPONENTS="${{ github.event.inputs.deploy_components }}"
             
             # Default to false for all components
-            WEBSITE="false"
             NGINX="false"
             MONITORING="false"
             GHOST="false"
@@ -64,7 +62,6 @@ jobs:
             
             # Check if "all" was specified
             if [ "$COMPONENTS" == "all" ]; then
-              WEBSITE="true"
               NGINX="true"
               MONITORING="true"
               GHOST="true"
@@ -76,7 +73,6 @@ jobs:
               for comp in "${COMP_ARRAY[@]}"; do
                 comp=$(echo "$comp" | xargs)  # Trim whitespace
                 case "$comp" in
-                  website) WEBSITE="true" ;;
                   nginx) NGINX="true" ;;
                   monitoring) MONITORING="true" ;;
                   ghost) GHOST="true" ;;
@@ -86,7 +82,6 @@ jobs:
               done
             fi
             
-            echo "website=$WEBSITE" >> $GITHUB_OUTPUT
             echo "nginx=$NGINX" >> $GITHUB_OUTPUT
             echo "monitoring=$MONITORING" >> $GITHUB_OUTPUT
             echo "ghost=$GHOST" >> $GITHUB_OUTPUT
@@ -104,7 +99,6 @@ jobs:
             }
             
             # Check each component
-            echo "website=$(check_changes 'docker/Dockerfile.website\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
             echo "nginx=$(check_changes 'docker/nginx/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
             echo "monitoring=$(check_changes 'docker/prometheus/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
             echo "ghost=$(check_changes 'docker/ghost/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
@@ -215,7 +209,7 @@ jobs:
             
             # Create required directories
             sudo mkdir -p /opt/docker/{nginx/sites-enabled,nginx/snippets,prometheus,grafana/provisioning/datasources}
-            sudo mkdir -p /opt/ghost /opt/website
+            sudo mkdir -p /opt/ghost
             sudo mkdir -p /var/www/certbot
             
             # Move Docker files to proper location
@@ -247,45 +241,6 @@ jobs:
           ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
             chmod +x ~/configure-nginx-domains.sh
             sudo ~/configure-nginx-domains.sh "${DOMAIN_NAME}"
-          EOF
-      
-      - name: Deploy Website
-        if: needs.detect-changes.outputs.website == 'true' || github.event_name == 'workflow_run'
-        run: |
-          echo "Deploying website..."
-          
-          # Copy files to VM
-          scp -i ~/.ssh/deploy_key -r docker/docker-compose.yml docker/Dockerfile.website ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/
-          
-          # Build and restart website container
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
-            set -e
-            cd ~
-            
-            # Update docker-compose.yml
-            sudo mv docker-compose.yml /opt/docker/
-            sudo mv Dockerfile.website /opt/docker/
-            
-            # Pull latest website code
-            cd /opt
-            if [ -d "website/.git" ]; then
-              echo "Updating existing website repository..."
-              cd website && sudo git pull
-            else
-              echo "Cloning website repository..."
-              sudo git clone https://github.com/${{ github.repository_owner }}/website.git
-              sudo chown -R $USER:$USER website
-            fi
-            
-            # Rebuild and restart website
-            cd /opt/docker
-            sudo docker compose build website
-            sudo docker compose up -d website
-            
-            # Health check
-            sleep 10
-            # Website runs on port 80 inside container, accessed via nginx
-            sudo docker ps | grep website || echo "Warning: Website container not running"
           EOF
       
       - name: Deploy Nginx
@@ -348,7 +303,6 @@ jobs:
             
             # Enable Ghost nginx configs
             sudo mv /opt/docker/nginx/sites-enabled/ghost-admin.conf.disabled /opt/docker/nginx/sites-enabled/ghost-admin.conf || true
-            sudo mv /opt/docker/nginx/sites-enabled/future.conf.disabled /opt/docker/nginx/sites-enabled/future.conf || true
             
             sudo docker compose restart nginx
           EOF
