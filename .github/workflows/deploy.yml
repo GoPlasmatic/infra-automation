@@ -23,6 +23,14 @@ on:
         required: false
         default: 'reframe,sandbox'
         type: string
+      setup_ssl:
+        description: 'Setup/renew SSL certificates'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 env:
   REGISTRY: ghcr.io
@@ -436,7 +444,7 @@ jobs:
           echo "Health checks completed. Services should be accessible via domain names after DNS propagation."
       
       - name: Setup SSL Certificates
-        if: github.event_name == 'workflow_run'  # Only run on initial infrastructure deployment
+        if: github.event_name == 'workflow_run' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.setup_ssl != 'false')
         run: |
           VM_IP=${{ steps.get-ip.outputs.vm_ip }}
           EMAIL="${{ secrets.EMAIL_ADDRESS }}"
@@ -445,11 +453,12 @@ jobs:
           echo "Checking SSL certificates status..."
           
           # Check if certificates already exist and are valid
-          CERT_CHECK=$(ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP << 'EOF' || echo "NEEDS_SETUP"
+          CERT_CHECK=$(ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP << EOF || echo "NEEDS_SETUP"
             # Check if main certificate exists and is valid
-            if [ -f /etc/letsencrypt/live/www.${DOMAIN_NAME}/fullchain.pem ]; then
+            DOMAIN_NAME="${DOMAIN}"
+            if [ -f /etc/letsencrypt/live/www.\${DOMAIN_NAME}/fullchain.pem ]; then
               # Check expiry date (renew if less than 30 days remaining)
-              if openssl x509 -checkend 2592000 -noout -in /etc/letsencrypt/live/www.${DOMAIN_NAME}/fullchain.pem 2>/dev/null; then
+              if openssl x509 -checkend 2592000 -noout -in /etc/letsencrypt/live/www.\${DOMAIN_NAME}/fullchain.pem 2>/dev/null; then
                 echo "VALID"
               else
                 echo "EXPIRING_SOON"
