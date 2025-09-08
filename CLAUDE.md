@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This is an Infrastructure as Code (IaC) repository for deploying a multi-application server on Azure, primarily hosting Ghost CMS with monitoring services. The infrastructure is deployed exclusively through GitHub Actions CI/CD pipeline.
+This is an Infrastructure as Code (IaC) repository for deploying production infrastructure on Azure, hosting Ghost CMS as the main website along with API services and monitoring. The infrastructure is deployed exclusively through GitHub Actions CI/CD pipeline.
 
 ## Key Architecture Components
 
@@ -18,11 +18,14 @@ This is an Infrastructure as Code (IaC) repository for deploying a multi-applica
 ```
 Azure VM (Ubuntu 24.04 LTS)
 ├── Nginx (Reverse Proxy)
-│   ├── www.domain → Website/Ghost
-│   ├── grafana.domain → Grafana
-│   ├── webadmin.domain → Ghost Admin
-│   └── future.domain → Ghost Preview
+│   ├── www.domain → Ghost CMS (Main Website)
+│   ├── webadmin.domain → Ghost Admin Panel
+│   ├── reframeapi.domain → Reframe API Service
+│   ├── sandbox.domain → Sandbox Environment
+│   └── grafana.domain → Monitoring Dashboard
 ├── Ghost CMS + MySQL
+├── Reframe API (SWIFT Processing)
+├── Sandbox (Testing Environment)
 ├── Prometheus + Grafana (Monitoring)
 └── Node Exporter + cAdvisor (Metrics)
 ```
@@ -140,12 +143,13 @@ sudo docker compose -f /opt/docker/docker-compose.yml restart <service>
 
 ## Important Notes
 
-- Ghost CMS is mandatory, not optional
+- Ghost CMS is the main website at www.domain
 - All manual deployment options have been removed
 - SSL/HTTPS is automatic and mandatory
 - Terraform state storage is automatic
 - DNS is managed externally in GoDaddy
 - All domain references use DOMAIN_NAME variable (no hardcoding)
+- Website and future subdomains have been removed (Ghost is now the main site)
 - Infrastructure updates should only be done through GitHub Actions
 
 ## Version Information
