@@ -239,14 +239,14 @@ jobs:
             sudo mkdir -p /opt/ghost
             sudo mkdir -p /var/www/certbot
 
-            # Clean up any old/conflicting nginx configs that might exist
-            echo "Cleaning up old nginx configurations..."
-            # Remove any configs not in our current deployment
-            sudo find /opt/docker/nginx/sites-enabled -name "*.conf" -type f | while read file; do
-              basename_file=\$(basename "\$file")
-              if [ ! -f "~/docker/nginx/sites-enabled/\$basename_file" ]; then
-                echo "Removing old config: \$basename_file"
-                sudo rm -f "\$file"
+            # Clean up specific known problematic configs
+            echo "Cleaning up known problematic nginx configurations..."
+            # Remove only specific configs that are known to cause issues
+            PROBLEM_CONFIGS=("future.conf")
+            for config in "\${PROBLEM_CONFIGS[@]}"; do
+              if [ -f "/opt/docker/nginx/sites-enabled/\$config" ]; then
+                echo "Removing problematic config: \$config"
+                sudo rm -f "/opt/docker/nginx/sites-enabled/\$config"
               fi
             done
 
@@ -296,26 +296,53 @@ jobs:
           ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
             set -e
 
-            # Clean up old configs first
-            echo "Cleaning up old nginx site configs..."
-            sudo find /opt/docker/nginx/sites-enabled -name "*.conf" -type f | while read file; do
-              basename_file=$(basename "$file")
-              if [ ! -f "~/nginx/sites-enabled/$basename_file" ]; then
-                echo "Removing old config: $basename_file"
-                sudo rm -f "$file"
+            # List current configs for reference
+            echo "Current nginx configs in ~/nginx/sites-enabled:"
+            ls -la ~/nginx/sites-enabled/ 2>/dev/null || echo "No sites-enabled directory"
+
+            # Clean up only specific known obsolete configs
+            echo "Checking for obsolete nginx configs to remove..."
+            OBSOLETE_CONFIGS=("future.conf" "website-old.conf")
+            for config in "${OBSOLETE_CONFIGS[@]}"; do
+              if [ -f "/opt/docker/nginx/sites-enabled/$config" ]; then
+                echo "Removing obsolete config: $config"
+                sudo rm -f "/opt/docker/nginx/sites-enabled/$config"
               fi
             done
 
-            # Now copy new configs
+            # Backup existing nginx directory before overwriting
+            if [ -d /opt/docker/nginx ]; then
+              sudo cp -r /opt/docker/nginx /opt/docker/nginx.backup.$(date +%s) 2>/dev/null || true
+            fi
+
+            # Now copy new configs (preserving mime.types and other essential files)
             sudo cp -r ~/nginx/* /opt/docker/nginx/
             cd /opt/docker
 
             # Test nginx configuration before restart
             echo "Testing nginx configuration..."
-            sudo docker run --rm -v /opt/docker/nginx:/etc/nginx:ro nginx:alpine nginx -t || {
+            # Mount only the specific files/directories we actually use, matching docker-compose.yml
+            sudo docker run --rm \
+              -v /opt/docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+              -v /opt/docker/nginx/sites-enabled:/etc/nginx/sites-enabled:ro \
+              -v /opt/docker/nginx/snippets:/etc/nginx/snippets:ro \
+              nginx:alpine nginx -t || {
               echo "ERROR: Nginx configuration test failed!"
               echo "Checking for issues..."
-              sudo docker run --rm -v /opt/docker/nginx:/etc/nginx:ro nginx:alpine nginx -T 2>&1 | grep -E "emerg|error" || true
+              sudo docker run --rm \
+                -v /opt/docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro \
+                -v /opt/docker/nginx/sites-enabled:/etc/nginx/sites-enabled:ro \
+                -v /opt/docker/nginx/snippets:/etc/nginx/snippets:ro \
+                nginx:alpine nginx -T 2>&1 | grep -E "emerg|error" || true
+
+              # Try to restore backup if available
+              if [ -d /opt/docker/nginx.backup.* ]; then
+                echo "Attempting to restore previous nginx configuration..."
+                LATEST_BACKUP=$(ls -t /opt/docker/nginx.backup.* | head -1)
+                sudo rm -rf /opt/docker/nginx
+                sudo mv $LATEST_BACKUP /opt/docker/nginx
+                echo "Restored from backup: $LATEST_BACKUP"
+              fi
               exit 1
             }
 
