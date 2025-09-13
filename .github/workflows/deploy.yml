@@ -233,12 +233,23 @@ jobs:
           # Setup directories and move files
           ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
             set -e
-            
+
             # Create required directories
             sudo mkdir -p /opt/docker/{nginx/sites-enabled,nginx/snippets,prometheus,grafana/provisioning/datasources}
             sudo mkdir -p /opt/ghost
             sudo mkdir -p /var/www/certbot
-            
+
+            # Clean up any old/conflicting nginx configs that might exist
+            echo "Cleaning up old nginx configurations..."
+            # Remove any configs not in our current deployment
+            sudo find /opt/docker/nginx/sites-enabled -name "*.conf" -type f | while read file; do
+              basename_file=\$(basename "\$file")
+              if [ ! -f "~/docker/nginx/sites-enabled/\$basename_file" ]; then
+                echo "Removing old config: \$basename_file"
+                sudo rm -f "\$file"
+              fi
+            done
+
             # Move Docker files to proper location
             sudo cp -r ~/docker/* /opt/docker/
             sudo cp ~/docker/.env /opt/docker/.env
@@ -284,12 +295,41 @@ jobs:
           # Update and restart nginx
           ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
             set -e
+
+            # Clean up old configs first
+            echo "Cleaning up old nginx site configs..."
+            sudo find /opt/docker/nginx/sites-enabled -name "*.conf" -type f | while read file; do
+              basename_file=$(basename "$file")
+              if [ ! -f "~/nginx/sites-enabled/$basename_file" ]; then
+                echo "Removing old config: $basename_file"
+                sudo rm -f "$file"
+              fi
+            done
+
+            # Now copy new configs
             sudo cp -r ~/nginx/* /opt/docker/nginx/
             cd /opt/docker
+
+            # Test nginx configuration before restart
+            echo "Testing nginx configuration..."
+            sudo docker run --rm -v /opt/docker/nginx:/etc/nginx:ro nginx:alpine nginx -t || {
+              echo "ERROR: Nginx configuration test failed!"
+              echo "Checking for issues..."
+              sudo docker run --rm -v /opt/docker/nginx:/etc/nginx:ro nginx:alpine nginx -T 2>&1 | grep -E "emerg|error" || true
+              exit 1
+            }
+
+            # Restart nginx if config is valid
             sudo docker compose restart nginx
-            
-            # Test nginx config (if container is running)
-            sudo docker exec nginx nginx -t 2>/dev/null || echo "Nginx container not yet running"
+
+            # Verify nginx started successfully
+            sleep 5
+            if sudo docker ps | grep -q "main_nginx.*Up.*healthy"; then
+              echo "✓ Nginx restarted successfully and is healthy"
+            else
+              echo "⚠ Warning: Nginx may not be healthy, checking logs..."
+              sudo docker logs main_nginx --tail 20
+            fi
           EOF
       
       - name: Deploy Monitoring
@@ -428,19 +468,53 @@ jobs:
       - name: Run health checks
         run: |
           VM_IP=${{ steps.get-ip.outputs.vm_ip }}
-          
+
           echo "Running health checks..."
           echo "Note: Services may take a moment to fully start"
-          
+
           # Give services time to start
           sleep 30
-          
+
+          # Check all container statuses
+          echo "Checking Docker container health..."
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP << 'EOF'
+            set -e
+
+            # Check nginx is healthy
+            if sudo docker ps | grep -q "main_nginx.*Up.*healthy"; then
+              echo "✓ Nginx is healthy"
+            elif sudo docker ps | grep -q "main_nginx.*Restarting"; then
+              echo "✗ ERROR: Nginx is in restart loop!"
+              echo "Nginx logs:"
+              sudo docker logs main_nginx --tail 30
+
+              # Try to identify and fix common issues
+              echo "Checking for duplicate upstream definitions..."
+              sudo docker run --rm -v /opt/docker/nginx:/etc/nginx:ro nginx:alpine nginx -T 2>&1 | grep -E "duplicate upstream" || true
+              exit 1
+            else
+              echo "⚠ Warning: Nginx status unknown"
+              sudo docker ps | grep nginx || true
+            fi
+
+            # Check other critical services
+            SERVICES=("ghost_cms" "reframe_api" "sandbox_website")
+            for service in "${SERVICES[@]}"; do
+              if sudo docker ps | grep -q "$service.*Up"; then
+                echo "✓ $service is running"
+              else
+                echo "⚠ Warning: $service may not be running properly"
+              fi
+            done
+
+            echo ""
+            echo "Container Summary:"
+            sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          EOF
+
           # Check main website (nginx default or website)
-          curl -f -s -o /dev/null -w "Website: %{http_code}\n" http://$VM_IP || true
-          
-          # Check if docker is running
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP "sudo docker ps"
-          
+          curl -f -s -o /dev/null -w "Website HTTP check: %{http_code}\n" http://$VM_IP || true
+
           echo "Health checks completed. Services should be accessible via domain names after DNS propagation."
       
       - name: Setup SSL Certificates
