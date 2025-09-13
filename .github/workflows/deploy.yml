@@ -239,16 +239,27 @@ jobs:
             sudo mkdir -p /opt/ghost
             sudo mkdir -p /var/www/certbot
 
-            # Clean up specific known problematic configs
+            # Clean up specific known problematic configs from both filesystem and container
             echo "Cleaning up known problematic nginx configurations..."
             # Remove only specific configs that are known to cause issues
-            PROBLEM_CONFIGS=("future.conf")
-            for config in "\${PROBLEM_CONFIGS[@]}"; do
-              if [ -f "/opt/docker/nginx/sites-enabled/\$config" ]; then
-                echo "Removing problematic config: \$config"
-                sudo rm -f "/opt/docker/nginx/sites-enabled/\$config"
-              fi
+            PROBLEM_CONFIGS=("future.conf" "*.conf.disabled")
+            for pattern in "\${PROBLEM_CONFIGS[@]}"; do
+              # Clean from filesystem
+              for file in /opt/docker/nginx/sites-enabled/\$pattern; do
+                if [ -f "\$file" ]; then
+                  echo "Removing problematic config from filesystem: \$(basename \$file)"
+                  sudo rm -f "\$file"
+                fi
+              done
             done
+
+            # Also clean from inside running container if it exists
+            if sudo docker ps -a | grep -q main_nginx; then
+              echo "Cleaning problematic configs from nginx container..."
+              for pattern in "\${PROBLEM_CONFIGS[@]}"; do
+                sudo docker exec main_nginx sh -c "rm -f /etc/nginx/sites-enabled/\$pattern 2>/dev/null" || true
+              done
+            fi
 
             # Move Docker files to proper location
             sudo cp -r ~/docker/* /opt/docker/
@@ -300,17 +311,27 @@ jobs:
             echo "Current nginx configs in ~/nginx/sites-enabled:"
             ls -la ~/nginx/sites-enabled/ 2>/dev/null || echo "No sites-enabled directory"
 
-            # Clean up only specific known obsolete configs
+            # Clean up only specific known obsolete configs - both in filesystem and container
             echo "Checking for obsolete nginx configs to remove..."
+
+            # First, clean up from the filesystem
             OBSOLETE_CONFIGS=("future.conf" "website-old.conf" "*.conf.disabled")
             for pattern in "${OBSOLETE_CONFIGS[@]}"; do
               for file in /opt/docker/nginx/sites-enabled/$pattern; do
                 if [ -f "$file" ]; then
-                  echo "Removing obsolete config: $(basename $file)"
+                  echo "Removing obsolete config from filesystem: $(basename $file)"
                   sudo rm -f "$file"
                 fi
               done
             done
+
+            # Also clean up from inside the running container if it exists
+            if sudo docker ps -a | grep -q main_nginx; then
+              echo "Cleaning obsolete configs from nginx container..."
+              for pattern in "${OBSOLETE_CONFIGS[@]}"; do
+                sudo docker exec main_nginx sh -c "rm -f /etc/nginx/sites-enabled/$pattern 2>/dev/null" || true
+              done
+            fi
 
             # Backup existing nginx directory before overwriting
             if [ -d /opt/docker/nginx ]; then
