@@ -431,7 +431,13 @@ jobs:
           echo "Deploying Reframe API with MongoDB"
           echo "========================================"
 
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
+          # Export vars for SSH session
+          ACR_URL="${{ secrets.ACR_URL }}"
+          ACR_USERNAME="${{ secrets.ACR_USERNAME }}"
+          ACR_PASSWORD="${{ secrets.ACR_PASSWORD }}"
+
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} \
+            "ACR_URL='${ACR_URL}' ACR_USERNAME='${ACR_USERNAME}' ACR_PASSWORD='${ACR_PASSWORD}' bash -s" << 'ENDSSH'
             set -e
             cd /opt/docker
 
@@ -518,7 +524,7 @@ jobs:
             echo "   MongoDB: Running and healthy"
             echo "   Reframe: Running and healthy"
             echo ""
-          EOF
+ENDSSH
       
       - name: Deploy Sandbox
         if: needs.detect-changes.outputs.sandbox == 'true'
@@ -529,7 +535,11 @@ jobs:
           echo "Deploying Sandbox Website"
           echo "========================================"
 
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
+          # Export vars for SSH session
+          ACR_URL="${{ secrets.ACR_URL }}"
+
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} \
+            "ACR_URL='${ACR_URL}' bash -s" << 'ENDSSH'
             set -e
             cd /opt/docker
 
@@ -574,7 +584,7 @@ jobs:
             echo ""
             echo "✅ Sandbox deployment completed successfully"
             echo ""
-          EOF
+ENDSSH
 
       - name: Restart Nginx Safely
         if: needs.detect-changes.outputs.reframe == 'true' || needs.detect-changes.outputs.sandbox == 'true'
@@ -583,7 +593,7 @@ jobs:
           echo "Restarting Nginx (All services healthy)"
           echo "========================================"
 
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'ENDSSH'
             set -e
             cd /opt/docker
 
@@ -658,7 +668,7 @@ jobs:
 
             echo ""
             echo "✅ Nginx restart completed"
-          EOF
+ENDSSH
 
       - name: Run health checks
         run: |
