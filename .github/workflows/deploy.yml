@@ -484,6 +484,8 @@ jobs:
 
             # STAGE 3: Wait for Reframe to be ready before touching nginx
             echo "Step 5/5: Verifying Reframe health..."
+            echo "  Waiting for Reframe to be healthy (max 120s)..."
+            echo "  Note: Reframe needs ~70s start_period + health check time"
             echo "  Waiting for Reframe health endpoint (max 120s)..."
             echo "  Note: Reframe needs ~70s to initialize before /health is available"
             REFRAME_HEALTHY=false
