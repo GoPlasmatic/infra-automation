@@ -115,6 +115,8 @@ services:
       - RUST_LOG=info
       - REFRAME_PORT=3000
       - API_SERVER_URL=https://reframeapi.goplasmatic.io
+      # Package path (should be baked into the image during build)
+      - REFRAME_PACKAGE_PATH=/packages/swift-cbpr
       # Database configuration
       - DB_TYPE=mongodb
       - DB_URI=mongodb://reframe_db:27017
