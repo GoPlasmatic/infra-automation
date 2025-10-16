@@ -524,7 +524,7 @@ jobs:
             echo "   MongoDB: Running and healthy"
             echo "   Reframe: Running and healthy"
             echo ""
-ENDSSH
+          ENDSSH
       
       - name: Deploy Sandbox
         if: needs.detect-changes.outputs.sandbox == 'true'
@@ -584,7 +584,7 @@ ENDSSH
             echo ""
             echo "✅ Sandbox deployment completed successfully"
             echo ""
-ENDSSH
+          ENDSSH
 
       - name: Restart Nginx Safely
         if: needs.detect-changes.outputs.reframe == 'true' || needs.detect-changes.outputs.sandbox == 'true'
@@ -668,7 +668,7 @@ ENDSSH
 
             echo ""
             echo "✅ Nginx restart completed"
-ENDSSH
+          ENDSSH
 
       - name: Run health checks
         run: |
