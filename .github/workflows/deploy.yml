@@ -555,8 +555,8 @@ jobs:
             echo "  Waiting for Sandbox website endpoint (max 60s)..."
             SANDBOX_HEALTHY=false
             for i in {1..30}; do
-              # Test the endpoint directly instead of waiting for Docker status
-              if sudo docker exec sandbox_website curl -f -s http://localhost:3000/ > /dev/null 2>&1; then
+              # Test the endpoint directly (using wget since curl not available in Node Alpine)
+              if sudo docker exec sandbox_website wget -q -O- http://localhost:3000/ > /dev/null 2>&1; then
                 echo ""
                 echo "  ✓ Sandbox website endpoint responding"
                 SANDBOX_HEALTHY=true
