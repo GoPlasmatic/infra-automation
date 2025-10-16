@@ -94,11 +94,11 @@ services:
     networks:
       - reframe_network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 15s
 
   # Reframe API - SWIFT Message Transformation Engine (Using ACR image)
   reframe:
