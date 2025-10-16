@@ -484,8 +484,6 @@ jobs:
 
             # STAGE 3: Wait for Reframe to be ready before touching nginx
             echo "Step 5/5: Verifying Reframe health..."
-            echo "  Waiting for Reframe to be healthy (max 120s)..."
-            echo "  Note: Reframe needs ~70s start_period + health check time"
             echo "  Waiting for Reframe health endpoint (max 120s)..."
             echo "  Note: Reframe needs ~70s to initialize before /health is available"
             REFRAME_HEALTHY=false
@@ -554,16 +552,21 @@ jobs:
             sudo docker compose up -d --no-deps sandbox
 
             echo "Step 3/3: Verifying Sandbox health..."
-            echo "  Waiting for Sandbox to be healthy (max 60s)..."
+            echo "  Waiting for Sandbox website endpoint (max 60s)..."
             SANDBOX_HEALTHY=false
             for i in {1..30}; do
-              if sudo docker ps | grep -q "sandbox_website.*healthy"; then
-                echo "  ✓ Sandbox container is healthy"
+              # Test the endpoint directly instead of waiting for Docker status
+              if sudo docker exec sandbox_website curl -f -s http://localhost:3000/ > /dev/null 2>&1; then
+                echo ""
+                echo "  ✓ Sandbox website endpoint responding"
                 SANDBOX_HEALTHY=true
                 break
               fi
               if [ $i -eq 30 ]; then
-                echo "  ✗ Sandbox failed to become healthy within 60 seconds"
+                echo ""
+                echo "  ✗ Sandbox endpoint not responding after 60 seconds"
+                echo "  Container status:"
+                sudo docker ps | grep sandbox_website
                 echo "  Sandbox logs:"
                 sudo docker logs sandbox_website --tail 50
                 exit 1
