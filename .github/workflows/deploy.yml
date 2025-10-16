@@ -484,16 +484,17 @@ jobs:
 
             # STAGE 3: Wait for Reframe to be healthy before touching nginx
             echo "Step 5/5: Verifying Reframe health..."
-            echo "  Waiting for Reframe to be healthy (max 90s)..."
+            echo "  Waiting for Reframe to be healthy (max 120s)..."
+            echo "  Note: Reframe needs ~70s start_period + health check time"
             REFRAME_HEALTHY=false
-            for i in {1..45}; do
+            for i in {1..60}; do
               if sudo docker ps | grep -q "reframe_api.*healthy"; then
                 echo "  ✓ Reframe container is healthy"
                 REFRAME_HEALTHY=true
                 break
               fi
-              if [ $i -eq 45 ]; then
-                echo "  ✗ Reframe failed to become healthy within 90 seconds"
+              if [ $i -eq 60 ]; then
+                echo "  ✗ Reframe failed to become healthy within 120 seconds"
                 echo "  Reframe logs:"
                 sudo docker logs reframe_api --tail 50
                 exit 1
