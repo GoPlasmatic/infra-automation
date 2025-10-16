@@ -431,7 +431,7 @@ jobs:
           echo "Deploying Reframe API with MongoDB"
           echo "========================================"
 
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
             set -e
             cd /opt/docker
 
@@ -529,7 +529,7 @@ jobs:
           echo "Deploying Sandbox Website"
           echo "========================================"
 
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
             set -e
             cd /opt/docker
 
@@ -583,7 +583,7 @@ jobs:
           echo "Restarting Nginx (All services healthy)"
           echo "========================================"
 
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << 'EOF'
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} << EOF
             set -e
             cd /opt/docker
 
