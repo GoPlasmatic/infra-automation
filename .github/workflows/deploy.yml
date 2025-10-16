@@ -482,18 +482,24 @@ jobs:
             echo "  Starting Reframe container..."
             sudo docker compose up -d --no-deps reframe
 
-            # STAGE 3: Wait for Reframe to be healthy before touching nginx
+            # STAGE 3: Wait for Reframe to be ready before touching nginx
             echo "Step 5/5: Verifying Reframe health..."
-            echo "  Waiting for Reframe to be healthy (max 90s)..."
+            echo "  Waiting for Reframe health endpoint (max 120s)..."
+            echo "  Note: Reframe needs ~70s to initialize before /health is available"
             REFRAME_HEALTHY=false
-            for i in {1..45}; do
-              if sudo docker ps | grep -q "reframe_api.*healthy"; then
-                echo "  ✓ Reframe container is healthy"
+            for i in {1..60}; do
+              # Test the health endpoint directly instead of waiting for Docker status
+              if sudo docker exec reframe_api curl -f -s http://localhost:3000/health > /dev/null 2>&1; then
+                echo ""
+                echo "  ✓ Reframe health endpoint responding"
                 REFRAME_HEALTHY=true
                 break
               fi
-              if [ $i -eq 45 ]; then
-                echo "  ✗ Reframe failed to become healthy within 90 seconds"
+              if [ $i -eq 60 ]; then
+                echo ""
+                echo "  ✗ Reframe health endpoint not responding after 120 seconds"
+                echo "  Container status:"
+                sudo docker ps | grep reframe_api
                 echo "  Reframe logs:"
                 sudo docker logs reframe_api --tail 50
                 exit 1
