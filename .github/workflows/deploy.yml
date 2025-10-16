@@ -311,45 +311,40 @@ jobs:
             echo "Current nginx configs in ~/nginx/sites-enabled:"
             ls -la ~/nginx/sites-enabled/ 2>/dev/null || echo "No sites-enabled directory"
 
-            # Clean up only specific known obsolete configs - both in filesystem and container
-            echo "Checking for obsolete nginx configs to remove..."
+            # Stop nginx container FIRST to ensure clean config replacement
+            echo "Stopping nginx container to replace configs..."
+            cd /opt/docker
+            sudo docker compose stop nginx
 
-            # First, clean up from the filesystem
+            # Clean up only specific known obsolete configs from the filesystem
+            echo "Removing obsolete nginx configs..."
             OBSOLETE_CONFIGS=("future.conf" "website-old.conf" "*.conf.disabled")
             for pattern in "${OBSOLETE_CONFIGS[@]}"; do
               for file in /opt/docker/nginx/sites-enabled/$pattern; do
                 if [ -f "$file" ]; then
-                  echo "Removing obsolete config from filesystem: $(basename $file)"
+                  echo "  Removing: $(basename $file)"
                   sudo rm -f "$file"
                 fi
               done
             done
 
-            # Also clean up from inside the running container if it exists
-            if sudo docker ps -a | grep -q main_nginx; then
-              echo "Cleaning obsolete configs from nginx container..."
-              for pattern in "${OBSOLETE_CONFIGS[@]}"; do
-                sudo docker exec main_nginx sh -c "rm -f /etc/nginx/sites-enabled/$pattern 2>/dev/null" || true
-              done
-            fi
-
             # Backup existing nginx directory before overwriting
             if [ -d /opt/docker/nginx ]; then
+              echo "Creating backup of current nginx config..."
               sudo cp -r /opt/docker/nginx /opt/docker/nginx.backup.$(date +%s) 2>/dev/null || true
             fi
 
-            # Now copy new configs (preserving mime.types and other essential files)
+            # Copy new configs (preserving mime.types and other essential files)
+            echo "Copying new nginx configs..."
             sudo cp -r ~/nginx/* /opt/docker/nginx/
-            cd /opt/docker
 
-            # Skip nginx config test - it will be validated when the container starts
-            # The test fails in isolation due to upstream hosts not being resolvable
-            # which is expected behavior during deployment
-            echo "Nginx configuration will be validated when container starts..."
-            echo "Note: Configuration testing in isolation is skipped as upstream services may not be running"
+            # List final config files
+            echo "Final nginx config files:"
+            ls -la /opt/docker/nginx/sites-enabled/
 
-            # Restart nginx
-            sudo docker compose restart nginx
+            # Start nginx with fresh configs
+            echo "Starting nginx with new configuration..."
+            sudo docker compose up -d nginx
 
             # Verify nginx started successfully
             echo "Waiting for nginx to start..."
