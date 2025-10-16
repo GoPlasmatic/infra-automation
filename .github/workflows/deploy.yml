@@ -296,10 +296,10 @@ jobs:
         if: needs.detect-changes.outputs.nginx == 'true'
         run: |
           echo "Deploying Nginx configuration..."
-          
-          # Create nginx directory on remote first
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} "mkdir -p ~/nginx"
-          
+
+          # Clean and recreate nginx directory on remote to avoid stale files
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} "rm -rf ~/nginx && mkdir -p ~/nginx"
+
           # Copy nginx config
           scp -i ~/.ssh/deploy_key -r docker/nginx/* ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }}:~/nginx/
           
