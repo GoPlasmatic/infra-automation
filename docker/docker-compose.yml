@@ -80,6 +80,26 @@ services:
       timeout: 5s
       retries: 5
 
+  # MongoDB database for Reframe audit logging
+  reframe_db:
+    image: mongo:latest
+    container_name: reframe_db
+    restart: always
+    expose:
+      - "27017"
+    volumes:
+      - reframe_mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=reframe
+    networks:
+      - reframe_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # Reframe API - SWIFT Message Transformation Engine (Using ACR image)
   reframe:
     image: ${ACR_URL}/reframe:latest
@@ -90,10 +110,19 @@ services:
       - "3000"
     networks:
       - proxy_network
+      - reframe_network
     environment:
       - RUST_LOG=info
       - REFRAME_PORT=3000
       - API_SERVER_URL=https://reframeapi.goplasmatic.io
+      # Database configuration
+      - DB_TYPE=mongodb
+      - DB_URI=mongodb://reframe_db:27017
+      - DB_NAME=reframe
+      - DB_COLLECTION=reframe_audit
+    depends_on:
+      reframe_db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
@@ -220,6 +249,8 @@ volumes:
     driver: local
   ghost_mysql_data:
     driver: local
+  reframe_mongodb_data:
+    driver: local
   prometheus_data:
     driver: local
   grafana_data:
@@ -232,6 +263,9 @@ networks:
     driver: bridge
     name: proxy_network
   ghost_network:
+    driver: bridge
+    internal: true
+  reframe_network:
     driver: bridge
     internal: true
   monitoring_network:
