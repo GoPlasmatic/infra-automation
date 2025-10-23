@@ -34,7 +34,7 @@ jobs:
         id: get-ip
         run: |
           # Get IP from Azure
-          PROJECT_NAME="${{ vars.PROJECT_NAME || 'ghost-cms' }}"
+          PROJECT_NAME="${{ vars.PROJECT_NAME || 'multi-app-server' }}"
           ENVIRONMENT="${{ vars.ENVIRONMENT || 'production' }}"
           VM_IP=$(az vm show -d -g ${PROJECT_NAME}-${ENVIRONMENT}-rg -n ${PROJECT_NAME}-${ENVIRONMENT}-vm --query publicIps -o tsv 2>/dev/null || echo "")
           
