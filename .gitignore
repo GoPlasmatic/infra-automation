@@ -61,3 +61,6 @@ npm-debug.log
 yarn-error.log
 
 .claude/
+
+# Private documentation (contains sensitive info)
+private-docs/

@@ -774,7 +774,25 @@ jobs:
             
             echo "SSL setup completed"
           fi
-      
+
+      - name: Docker Cleanup
+        if: success()
+        run: |
+          VM_IP=${{ steps.get-ip.outputs.vm_ip }}
+
+          echo "Running Docker cleanup on VM to free up disk space..."
+
+          # Copy cleanup script to VM
+          scp -i ~/.ssh/deploy_key scripts/docker-cleanup.sh ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP:~/
+
+          # Run cleanup script
+          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@$VM_IP << 'EOF'
+            chmod +x ~/docker-cleanup.sh
+            ~/docker-cleanup.sh
+          EOF
+
+          echo "✓ Docker cleanup completed"
+
       - name: Cleanup
         if: always()
         run: |

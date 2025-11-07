@@ -20,6 +20,11 @@ services:
       - proxy_network
     depends_on:
       - ghost
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "nginx", "-t"]
       interval: 30s
@@ -55,6 +60,11 @@ services:
     networks:
       - proxy_network
       - ghost_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       ghost_db:
         condition: service_healthy
@@ -73,6 +83,11 @@ services:
       - ghost_mysql_data:/var/lib/mysql
     networks:
       - ghost_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: --default-authentication-plugin=mysql_native_password
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${GHOST_MYSQL_ROOT_PASSWORD}"]
@@ -93,6 +108,11 @@ services:
       - MONGO_INITDB_DATABASE=reframe
     networks:
       - reframe_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 10s
@@ -112,7 +132,7 @@ services:
       - proxy_network
       - reframe_network
     environment:
-      - RUST_LOG=info
+      - RUST_LOG=warn  # Changed from 'info' to 'warn' to reduce log verbosity in production
       - REFRAME_PORT=3000
       - API_SERVER_URL=https://reframeapi.goplasmatic.io
       # Package path (should be baked into the image during build)
@@ -122,6 +142,11 @@ services:
       - DB_URI=mongodb://reframe_db:27017
       - DB_NAME=reframe
       - DB_COLLECTION=reframe_audit
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"  # Larger limit for API service
+        max-file: "5"
     depends_on:
       reframe_db:
         condition: service_healthy
@@ -145,6 +170,11 @@ services:
     environment:
       - NODE_ENV=production
       - REFRAME_API_URL=https://reframeapi.goplasmatic.io
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/"]
       interval: 30s
@@ -165,6 +195,11 @@ services:
     networks:
       - monitoring_network
       - proxy_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -191,6 +226,11 @@ services:
     networks:
       - monitoring_network
       - proxy_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       - prometheus
 
@@ -207,6 +247,11 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
     command:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
@@ -227,6 +272,11 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
     devices:
       - /dev/kmsg:/dev/kmsg
 
