@@ -104,12 +104,20 @@ setup_ssl_for_service() {
     if run_command "[ -f $cert_path ]" && [ "$needs_renewal" = false ]; then
         echo "Copying existing certificates to nginx directory..."
         run_command "sudo mkdir -p /opt/docker/nginx/ssl"
+
+        # Find the actual certificate path (certbot may create -0001, -0002 suffixes)
+        local actual_cert_dir=$(run_command "ls -td /etc/letsencrypt/live/${primary_domain}* 2>/dev/null | head -1")
+        if [ -z "$actual_cert_dir" ]; then
+            actual_cert_dir="/etc/letsencrypt/live/$primary_domain"
+        fi
+        echo "Using certificate directory: $actual_cert_dir"
+
         if [ "$service" = "main" ]; then
-            run_command "sudo cp /etc/letsencrypt/live/$primary_domain/fullchain.pem /opt/docker/nginx/ssl/fullchain.pem 2>/dev/null" || true
-            run_command "sudo cp /etc/letsencrypt/live/$primary_domain/privkey.pem /opt/docker/nginx/ssl/privkey.pem 2>/dev/null" || true
+            run_command "sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/fullchain.pem 2>/dev/null" || true
+            run_command "sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/privkey.pem 2>/dev/null" || true
         else
-            run_command "sudo cp /etc/letsencrypt/live/$primary_domain/fullchain.pem /opt/docker/nginx/ssl/${service}-fullchain.pem 2>/dev/null" || true
-            run_command "sudo cp /etc/letsencrypt/live/$primary_domain/privkey.pem /opt/docker/nginx/ssl/${service}-privkey.pem 2>/dev/null" || true
+            run_command "sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/${service}-fullchain.pem 2>/dev/null" || true
+            run_command "sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/${service}-privkey.pem 2>/dev/null" || true
         fi
         run_command "sudo chmod 644 /opt/docker/nginx/ssl/*.pem 2>/dev/null || true"
         echo "SSL setup complete for $service"
@@ -144,17 +152,25 @@ setup_ssl_for_service() {
     
     # Copy certificates to nginx directory
     run_command "sudo mkdir -p /opt/docker/nginx/ssl"
-    
+
+    # Find the actual certificate path (certbot may create -0001, -0002 suffixes)
+    # Use the most recent cert directory for this domain
+    local actual_cert_dir=$(run_command "ls -td /etc/letsencrypt/live/${primary_domain}* 2>/dev/null | head -1")
+    if [ -z "$actual_cert_dir" ]; then
+        actual_cert_dir="/etc/letsencrypt/live/$primary_domain"
+    fi
+    echo "Using certificate directory: $actual_cert_dir"
+
     # Copy certificates with error handling
     echo "Copying certificates to nginx directory..."
     if [ "$service" = "main" ]; then
         # Main site uses default cert names
-        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/fullchain.pem /opt/docker/nginx/ssl/fullchain.pem 2>/dev/null" || true
-        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/privkey.pem /opt/docker/nginx/ssl/privkey.pem 2>/dev/null" || true
+        run_command "sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/fullchain.pem 2>/dev/null" || true
+        run_command "sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/privkey.pem 2>/dev/null" || true
     else
         # Other services use service-specific names
-        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/fullchain.pem /opt/docker/nginx/ssl/${service}-fullchain.pem 2>/dev/null" || true
-        run_command "sudo cp /etc/letsencrypt/live/$primary_domain/privkey.pem /opt/docker/nginx/ssl/${service}-privkey.pem 2>/dev/null" || true
+        run_command "sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/${service}-fullchain.pem 2>/dev/null" || true
+        run_command "sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/${service}-privkey.pem 2>/dev/null" || true
     fi
     
     # Set permissions
