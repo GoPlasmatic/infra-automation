@@ -101,25 +101,33 @@ setup_ssl_for_service() {
 
     # Always copy certificates to nginx directory (even if not renewing)
     # This ensures nginx has the latest certs from Let's Encrypt
-    if run_command "[ -f $cert_path ]" && [ "$needs_renewal" = false ]; then
+    if [ "$needs_renewal" = false ]; then
         echo "Copying existing certificates to nginx directory..."
         run_command "sudo mkdir -p /opt/docker/nginx/ssl"
 
         # Find the actual certificate path (certbot may create -0001, -0002 suffixes)
-        local actual_cert_dir=$(run_command "ls -td /etc/letsencrypt/live/${primary_domain}* 2>/dev/null | head -1")
+        # Sort by version number to get the highest suffix (e.g., -0002 > -0001 > base)
+        local actual_cert_dir=$(ls -d /etc/letsencrypt/live/${primary_domain}* 2>/dev/null | sort -V | tail -1)
         if [ -z "$actual_cert_dir" ]; then
             actual_cert_dir="/etc/letsencrypt/live/$primary_domain"
         fi
         echo "Using certificate directory: $actual_cert_dir"
 
-        if [ "$service" = "main" ]; then
-            run_command "sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/fullchain.pem 2>/dev/null" || true
-            run_command "sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/privkey.pem 2>/dev/null" || true
+        # Verify the certificate file exists and show its expiry
+        if [ -f "${actual_cert_dir}/fullchain.pem" ]; then
+            echo "Certificate expiry: $(openssl x509 -enddate -noout -in ${actual_cert_dir}/fullchain.pem 2>/dev/null || echo 'unknown')"
         else
-            run_command "sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/${service}-fullchain.pem 2>/dev/null" || true
-            run_command "sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/${service}-privkey.pem 2>/dev/null" || true
+            echo "WARNING: Certificate file not found at ${actual_cert_dir}/fullchain.pem"
         fi
-        run_command "sudo chmod 644 /opt/docker/nginx/ssl/*.pem 2>/dev/null || true"
+
+        if [ "$service" = "main" ]; then
+            sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/fullchain.pem || echo "Failed to copy fullchain.pem"
+            sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/privkey.pem || echo "Failed to copy privkey.pem"
+        else
+            sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/${service}-fullchain.pem || echo "Failed to copy fullchain.pem"
+            sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/${service}-privkey.pem || echo "Failed to copy privkey.pem"
+        fi
+        sudo chmod 644 /opt/docker/nginx/ssl/*.pem 2>/dev/null || true
         echo "SSL setup complete for $service"
         return 0
     fi
@@ -151,26 +159,33 @@ setup_ssl_for_service() {
     fi
     
     # Copy certificates to nginx directory
-    run_command "sudo mkdir -p /opt/docker/nginx/ssl"
+    sudo mkdir -p /opt/docker/nginx/ssl
 
     # Find the actual certificate path (certbot may create -0001, -0002 suffixes)
-    # Use the most recent cert directory for this domain
-    local actual_cert_dir=$(run_command "ls -td /etc/letsencrypt/live/${primary_domain}* 2>/dev/null | head -1")
+    # Sort by version number to get the highest suffix (e.g., -0002 > -0001 > base)
+    local actual_cert_dir=$(ls -d /etc/letsencrypt/live/${primary_domain}* 2>/dev/null | sort -V | tail -1)
     if [ -z "$actual_cert_dir" ]; then
         actual_cert_dir="/etc/letsencrypt/live/$primary_domain"
     fi
     echo "Using certificate directory: $actual_cert_dir"
 
+    # Verify the certificate file exists and show its expiry
+    if [ -f "${actual_cert_dir}/fullchain.pem" ]; then
+        echo "Certificate expiry: $(openssl x509 -enddate -noout -in ${actual_cert_dir}/fullchain.pem 2>/dev/null || echo 'unknown')"
+    else
+        echo "WARNING: Certificate file not found at ${actual_cert_dir}/fullchain.pem"
+    fi
+
     # Copy certificates with error handling
     echo "Copying certificates to nginx directory..."
     if [ "$service" = "main" ]; then
         # Main site uses default cert names
-        run_command "sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/fullchain.pem 2>/dev/null" || true
-        run_command "sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/privkey.pem 2>/dev/null" || true
+        sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/fullchain.pem || echo "Failed to copy fullchain.pem"
+        sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/privkey.pem || echo "Failed to copy privkey.pem"
     else
         # Other services use service-specific names
-        run_command "sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/${service}-fullchain.pem 2>/dev/null" || true
-        run_command "sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/${service}-privkey.pem 2>/dev/null" || true
+        sudo cp ${actual_cert_dir}/fullchain.pem /opt/docker/nginx/ssl/${service}-fullchain.pem || echo "Failed to copy fullchain.pem"
+        sudo cp ${actual_cert_dir}/privkey.pem /opt/docker/nginx/ssl/${service}-privkey.pem || echo "Failed to copy privkey.pem"
     fi
     
     # Set permissions
