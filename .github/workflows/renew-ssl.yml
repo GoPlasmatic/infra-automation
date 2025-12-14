@@ -33,16 +33,44 @@ jobs:
       - name: Get VM IP
         id: get-ip
         run: |
-          # Get IP from Azure
-          PROJECT_NAME="${{ vars.PROJECT_NAME || 'multi-app-server' }}"
-          ENVIRONMENT="${{ vars.ENVIRONMENT || 'production' }}"
-          VM_IP=$(az vm show -d -g ${PROJECT_NAME}-${ENVIRONMENT}-rg -n ${PROJECT_NAME}-${ENVIRONMENT}-vm --query publicIps -o tsv 2>/dev/null || echo "")
-          
+          # Try to resolve from DNS first (most reliable since DNS is configured)
+          if [ -n "${DOMAIN_NAME}" ]; then
+            echo "Trying to get IP from DNS for ${DOMAIN_NAME}..."
+            VM_IP=$(dig +short ${DOMAIN_NAME} | tail -n1)
+            if [ -n "$VM_IP" ]; then
+              echo "Found IP from DNS: $VM_IP"
+            fi
+          fi
+
+          # If not found via DNS, try Azure
+          if [ -z "$VM_IP" ]; then
+            echo "Getting IP from Azure..."
+            PROJECT_NAME="${{ vars.PROJECT_NAME || 'multi-app-server' }}"
+            ENVIRONMENT="${{ vars.ENVIRONMENT || 'production' }}"
+
+            # Try the expected naming convention first
+            VM_IP=$(az vm show -d -g ${PROJECT_NAME}-${ENVIRONMENT}-rg -n ${PROJECT_NAME}-${ENVIRONMENT}-vm --query publicIps -o tsv 2>/dev/null || echo "")
+
+            # If that fails, try alternate VM name (for migrated VMs)
+            if [ -z "$VM_IP" ]; then
+              echo "Trying alternate VM name..."
+              VM_IP=$(az vm show -d -g ${PROJECT_NAME}-${ENVIRONMENT}-rg -n ${PROJECT_NAME}-vm-new --query publicIps -o tsv 2>/dev/null || echo "")
+            fi
+
+            if [ -n "$VM_IP" ]; then
+              echo "Found IP from Azure: $VM_IP"
+            fi
+          fi
+
           if [ -z "$VM_IP" ]; then
             echo "Error: Could not determine VM IP"
+            echo "Please ensure:"
+            echo "  1. DOMAIN_NAME variable is set in repository settings"
+            echo "  2. DNS is pointing to the correct server"
+            echo "  3. Azure credentials are configured correctly"
             exit 1
           fi
-          
+
           echo "vm_ip=$VM_IP" >> $GITHUB_OUTPUT
       
       - name: Setup SSH
