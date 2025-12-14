@@ -88,14 +88,32 @@ setup_ssl_for_service() {
     
     # Check if certificate already exists and is valid
     local cert_path="/etc/letsencrypt/live/$primary_domain/fullchain.pem"
+    local needs_renewal=true
     if run_command "[ -f $cert_path ]"; then
         # Check if certificate is still valid for more than 30 days
         if run_command "openssl x509 -checkend 2592000 -noout -in $cert_path 2>/dev/null"; then
-            echo "Certificate for $service is valid for more than 30 days. Skipping renewal."
-            return 0
+            echo "Certificate for $service is valid for more than 30 days. Skipping renewal but ensuring nginx has latest certs."
+            needs_renewal=false
         else
             echo "Certificate for $service expiring soon. Renewing..."
         fi
+    fi
+
+    # Always copy certificates to nginx directory (even if not renewing)
+    # This ensures nginx has the latest certs from Let's Encrypt
+    if run_command "[ -f $cert_path ]" && [ "$needs_renewal" = false ]; then
+        echo "Copying existing certificates to nginx directory..."
+        run_command "sudo mkdir -p /opt/docker/nginx/ssl"
+        if [ "$service" = "main" ]; then
+            run_command "sudo cp /etc/letsencrypt/live/$primary_domain/fullchain.pem /opt/docker/nginx/ssl/fullchain.pem 2>/dev/null" || true
+            run_command "sudo cp /etc/letsencrypt/live/$primary_domain/privkey.pem /opt/docker/nginx/ssl/privkey.pem 2>/dev/null" || true
+        else
+            run_command "sudo cp /etc/letsencrypt/live/$primary_domain/fullchain.pem /opt/docker/nginx/ssl/${service}-fullchain.pem 2>/dev/null" || true
+            run_command "sudo cp /etc/letsencrypt/live/$primary_domain/privkey.pem /opt/docker/nginx/ssl/${service}-privkey.pem 2>/dev/null" || true
+        fi
+        run_command "sudo chmod 644 /opt/docker/nginx/ssl/*.pem 2>/dev/null || true"
+        echo "SSL setup complete for $service"
+        return 0
     fi
     
     # Try webroot method first (nginx must be running) - removed --force-renewal flag
