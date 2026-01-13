@@ -19,9 +19,9 @@ on:
   workflow_dispatch:
     inputs:
       deploy_components:
-        description: 'Components to deploy (comma-separated: nginx,monitoring,ghost,reframe,sandbox or "all")'
+        description: 'Components to deploy (comma-separated: nginx,monitoring,ghost,reframe or "all")'
         required: false
-        default: 'reframe,sandbox'
+        default: 'reframe'
         type: string
       setup_ssl:
         description: 'Setup/renew SSL certificates'
@@ -44,7 +44,6 @@ jobs:
       monitoring: ${{ steps.changes.outputs.monitoring }}
       ghost: ${{ steps.changes.outputs.ghost }}
       reframe: ${{ steps.changes.outputs.reframe }}
-      sandbox: ${{ steps.changes.outputs.sandbox }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -66,15 +65,13 @@ jobs:
             MONITORING="false"
             GHOST="false"
             REFRAME="false"
-            SANDBOX="false"
-            
+
             # Check if "all" was specified
             if [ "$COMPONENTS" == "all" ]; then
               NGINX="true"
               MONITORING="true"
               GHOST="true"
               REFRAME="true"
-              SANDBOX="true"
             else
               # Parse comma-separated components
               IFS=',' read -ra COMP_ARRAY <<< "$COMPONENTS"
@@ -85,16 +82,14 @@ jobs:
                   monitoring) MONITORING="true" ;;
                   ghost) GHOST="true" ;;
                   reframe) REFRAME="true" ;;
-                  sandbox) SANDBOX="true" ;;
                 esac
               done
             fi
-            
+
             echo "nginx=$NGINX" >> $GITHUB_OUTPUT
             echo "monitoring=$MONITORING" >> $GITHUB_OUTPUT
             echo "ghost=$GHOST" >> $GITHUB_OUTPUT
             echo "reframe=$REFRAME" >> $GITHUB_OUTPUT
-            echo "sandbox=$SANDBOX" >> $GITHUB_OUTPUT
           else
             # Function to check if files changed
             check_changes() {
@@ -113,14 +108,12 @@ jobs:
               echo "monitoring=true" >> $GITHUB_OUTPUT
               echo "ghost=true" >> $GITHUB_OUTPUT
               echo "reframe=true" >> $GITHUB_OUTPUT
-              echo "sandbox=true" >> $GITHUB_OUTPUT
             else
               # Check each component for workflow_run
               echo "nginx=$(check_changes 'docker/nginx/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
               echo "monitoring=$(check_changes 'docker/prometheus/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
               echo "ghost=$(check_changes 'docker/ghost/\|docker/docker-compose.yml')" >> $GITHUB_OUTPUT
               echo "reframe=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
-              echo "sandbox=$(check_changes 'docker/docker-compose.yml')" >> $GITHUB_OUTPUT
             fi
           fi
 
@@ -526,74 +519,9 @@ jobs:
             echo "   Reframe: Running and healthy"
             echo ""
           ENDSSH
-      
-      - name: Deploy Sandbox
-        if: needs.detect-changes.outputs.sandbox == 'true'
-        env:
-          ACR_URL: ${{ secrets.ACR_URL }}
-        run: |
-          echo "========================================"
-          echo "Deploying Sandbox Website"
-          echo "========================================"
-
-          # Export vars for SSH session
-          ACR_URL="${{ secrets.ACR_URL }}"
-
-          ssh -i ~/.ssh/deploy_key ${{ secrets.VM_ADMIN_USERNAME }}@${{ steps.get-ip.outputs.vm_ip }} \
-            "ACR_URL='${ACR_URL}' bash -s" << 'ENDSSH'
-            set -e
-            cd /opt/docker
-
-            echo "Step 1/3: Pulling latest Sandbox image from ACR..."
-            sudo docker pull ${ACR_URL}/sandbox:latest
-
-            echo "Step 2/3: Deploying Sandbox container..."
-            # Deploy WITHOUT restarting other services
-            sudo docker compose up -d --no-deps sandbox
-
-            echo "Step 3/3: Verifying Sandbox health..."
-            echo "  Waiting for Sandbox website endpoint (max 60s)..."
-            SANDBOX_HEALTHY=false
-            for i in {1..30}; do
-              # Test the endpoint directly (using wget since curl not available in Node Alpine)
-              if sudo docker exec sandbox_website wget -q -O- http://localhost:3000/ > /dev/null 2>&1; then
-                echo ""
-                echo "  ✓ Sandbox website endpoint responding"
-                SANDBOX_HEALTHY=true
-                break
-              fi
-              if [ $i -eq 30 ]; then
-                echo ""
-                echo "  ✗ Sandbox endpoint not responding after 60 seconds"
-                echo "  Container status:"
-                sudo docker ps | grep sandbox_website
-                echo "  Sandbox logs:"
-                sudo docker logs sandbox_website --tail 50
-                exit 1
-              fi
-              echo -n "."
-              sleep 2
-            done
-
-            # Verify endpoint responds
-            if [ "$SANDBOX_HEALTHY" = true ]; then
-              echo "  Testing Sandbox website endpoint..."
-              if curl -f -s -o /dev/null -w "  Sandbox Website: %{http_code}\n" http://localhost:3000/; then
-                echo "  ✓ Sandbox website is responding correctly"
-              else
-                echo "  ⚠ Sandbox website health endpoint not responding"
-                sudo docker logs sandbox_website --tail 30
-                # Don't fail, nginx will handle it gracefully
-              fi
-            fi
-
-            echo ""
-            echo "✅ Sandbox deployment completed successfully"
-            echo ""
-          ENDSSH
 
       - name: Restart Nginx Safely
-        if: needs.detect-changes.outputs.reframe == 'true' || needs.detect-changes.outputs.sandbox == 'true'
+        if: needs.detect-changes.outputs.reframe == 'true'
         run: |
           echo "========================================"
           echo "Restarting Nginx (All services healthy)"
@@ -612,16 +540,6 @@ jobs:
                 echo "   Nginx will gracefully handle upstream failures"
               else
                 echo "  ✓ Reframe is healthy"
-              fi
-            fi
-
-            # Check Sandbox
-            if sudo docker ps -a | grep -q sandbox_website; then
-              if ! sudo docker ps | grep -q "sandbox_website.*healthy"; then
-                echo "⚠ Warning: Sandbox is not healthy, but proceeding with nginx restart"
-                echo "   Nginx will gracefully handle upstream failures"
-              else
-                echo "  ✓ Sandbox is healthy"
               fi
             fi
 
@@ -709,7 +627,7 @@ jobs:
             fi
 
             # Check other critical services
-            SERVICES=("ghost_cms" "reframe_api" "sandbox_website")
+            SERVICES=("ghost_cms" "reframe_api")
             for service in "${SERVICES[@]}"; do
               if sudo docker ps | grep -q "$service.*Up"; then
                 echo "✓ $service is running"

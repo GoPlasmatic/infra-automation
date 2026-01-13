@@ -21,13 +21,14 @@ Azure VM (Ubuntu 24.04 LTS)
 │   ├── www.domain → Ghost CMS (Main Website)
 │   ├── webadmin.domain → Ghost Admin Panel
 │   ├── reframeapi.domain → Reframe API Service
-│   ├── sandbox.domain → Sandbox Environment
 │   └── grafana.domain → Monitoring Dashboard
 ├── Ghost CMS + MySQL
 ├── Reframe API (SWIFT Processing)
-├── Sandbox (Testing Environment)
 ├── Prometheus + Grafana (Monitoring)
 └── Node Exporter + cAdvisor (Metrics)
+
+External Services:
+├── sandbox.domain → GitHub Pages (separate repository)
 ```
 
 ## Essential Commands
@@ -150,6 +151,7 @@ sudo docker compose -f /opt/docker/docker-compose.yml restart <service>
 - DNS is managed externally in GoDaddy
 - All domain references use DOMAIN_NAME variable (no hardcoding)
 - Website and future subdomains have been removed (Ghost is now the main site)
+- Sandbox subdomain is hosted on GitHub Pages (DNS points to GitHub's IPs)
 - Infrastructure updates should only be done through GitHub Actions
 
 ## Version Information

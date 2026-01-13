@@ -64,21 +64,22 @@ output "acr_resource_id" {
 output "dns_instructions" {
   description = "Instructions for DNS configuration"
   value = <<-EOT
-    
+
     ====================================
     DNS Configuration Required
     ====================================
-    
+
     Add these A records in GoDaddy DNS:
-    
-    @ (root)     → ${azurerm_public_ip.main.ip_address}
-    www          → ${azurerm_public_ip.main.ip_address}
-    grafana      → ${azurerm_public_ip.main.ip_address}
-    webadmin     → ${azurerm_public_ip.main.ip_address}
-    future       → ${azurerm_public_ip.main.ip_address}
-    reframeapi   → ${azurerm_public_ip.main.ip_address}
-    sandbox      → ${azurerm_public_ip.main.ip_address}
-    
+
+    @ (root)      → ${azurerm_public_ip.main.ip_address}
+    www           → ${azurerm_public_ip.main.ip_address}
+    grafana       → ${azurerm_public_ip.main.ip_address}
+    webadmin      → ${azurerm_public_ip.main.ip_address}
+    reframeapi    → ${azurerm_public_ip.main.ip_address}
+
+    GitHub Pages subdomain (CNAME record):
+    sandbox      → <username>.github.io
+
     DNS propagation takes 5-30 minutes typically.
     ====================================
   EOT
