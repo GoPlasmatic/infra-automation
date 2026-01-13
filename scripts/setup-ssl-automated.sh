@@ -43,16 +43,16 @@ check_dns() {
 # Function to get the certificate path from certbot for a domain
 get_cert_path() {
     local domain=$1
-    # Use certbot certificates to get the actual path
-    local cert_path=$(certbot certificates 2>/dev/null | grep -A4 "Domains:.*${domain}" | grep "Certificate Path:" | awk '{print $3}')
+    # Use certbot certificates to get the actual path (needs sudo to read certbot state)
+    local cert_path=$(sudo certbot certificates 2>/dev/null | grep -A4 "Domains:.*${domain}" | grep "Certificate Path:" | awk '{print $3}')
     if [ -n "$cert_path" ] && [ -f "$cert_path" ]; then
         echo "$cert_path"
         return 0
     fi
 
-    # Fallback: find the directory with highest suffix
-    local cert_dir=$(ls -d /etc/letsencrypt/live/${domain}* 2>/dev/null | sort -V | tail -1)
-    if [ -n "$cert_dir" ] && [ -f "${cert_dir}/fullchain.pem" ]; then
+    # Fallback: find the directory with highest suffix (needs sudo for /etc/letsencrypt/live/)
+    local cert_dir=$(sudo ls -d /etc/letsencrypt/live/${domain}* 2>/dev/null | sort -V | tail -1)
+    if [ -n "$cert_dir" ] && sudo test -f "${cert_dir}/fullchain.pem"; then
         echo "${cert_dir}/fullchain.pem"
         return 0
     fi
@@ -220,7 +220,7 @@ cd /opt/docker && sudo docker compose restart nginx 2>/dev/null || echo "Nginx r
 
 # Wait for nginx to start and verify
 sleep 3
-if docker ps | grep -q "main_nginx.*Up"; then
+if sudo docker ps | grep -q "nginx.*Up"; then
     echo "✓ Nginx is running"
 else
     echo "WARNING: Nginx may not be running properly"
