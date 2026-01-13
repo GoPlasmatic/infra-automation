@@ -45,7 +45,7 @@ get_cert_path() {
     local domain=$1
     # Use certbot certificates to get the actual path (needs sudo to read certbot state)
     local cert_path=$(sudo certbot certificates 2>/dev/null | grep -A4 "Domains:.*${domain}" | grep "Certificate Path:" | awk '{print $3}')
-    if [ -n "$cert_path" ] && [ -f "$cert_path" ]; then
+    if [ -n "$cert_path" ] && sudo test -f "$cert_path"; then
         echo "$cert_path"
         return 0
     fi
